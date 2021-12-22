@@ -3,4 +3,4 @@ bin/
 .classpath
 .project
 note.txt
-config.txt
+src/other/

@@ -1,0 +1,17 @@
+ register user1 password tag1 tag2
+login user1 password
+  logout
+	post "Titolo"		"Contenuto del post"
+rate 123 -1
+rate 122 +1
+blog
+show feed
+show post 123
+wallet
+wallet btc
+follow user1
+unfollow user1
+help cmd show
+help
+quit
+exit
