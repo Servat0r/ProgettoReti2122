@@ -2,7 +2,7 @@ package winsome.test;
 
 import java.util.*;
 
-import winsome.common.*;
+import winsome.common.config.*;
 
 public final class ConfigParserTestMain {
 

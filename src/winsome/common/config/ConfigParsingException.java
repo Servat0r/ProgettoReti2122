@@ -1,4 +1,4 @@
-package winsome.common;
+package winsome.common.config;
 
 public final class ConfigParsingException extends Exception {
 

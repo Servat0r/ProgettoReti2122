@@ -1,4 +1,4 @@
-package winsome.common;
+package winsome.common.config;
 
 import java.io.*;
 import java.util.*;

@@ -14,7 +14,11 @@ public final class Command {
 		this.args = new ArrayList<>();
 		if (args != null) { for (String arg : args) this.args.add(arg); }
 	}
-		
+	
+	public final String getId() { return id; }
+	public final String getParam() { return param; }
+	public final List<String> getArgs() { return args; }
+	
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
 		sb.append("Command [id = '" + id + (param != null ? "'; param = '" + param : "") + "'; args = {");
