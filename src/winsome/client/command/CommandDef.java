@@ -3,6 +3,8 @@ package winsome.client.command;
 import java.util.*;
 import java.util.regex.*;
 
+import winsome.util.Common;
+
 public final class CommandDef {
 	
 	private static final String[] SYNTAX_ERROR = {"Syntax error for ", ": '", "'"};
@@ -16,6 +18,7 @@ public final class CommandDef {
 	private final HashMap<String, CommandArgs> args; /* param -> regex (eventualmente param = "") */
 	
 	public CommandDef(String id, HashMap<String, CommandArgs> args) {
+		Common.notNull(id, args);
 		if (!Pattern.matches(ID_PARAM_REGEX, id))
 			throw new IllegalArgumentException(SYNTAX_ERROR[0] + "id" + SYNTAX_ERROR[1] + id + SYNTAX_ERROR[2]);
 		for (String key : args.keySet()) {

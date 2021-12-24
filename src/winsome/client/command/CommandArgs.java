@@ -48,7 +48,7 @@ public final class CommandArgs {
 		while (cmdstrip.length() > 0) {
 			cmdstrip = cmdstrip.strip();
 			m = Pattern.compile(this.regexes[index++]).matcher(cmdstrip);
-			m.find();
+			if (!m.find()) throw new IllegalArgumentException();
 			int len = m.end();
 			result.add( new String(cmdstrip.substring(0, len)).strip() );
 			cmdstrip = new String(cmdstrip.substring(len));

@@ -2,6 +2,8 @@ package winsome.client.command;
 
 import java.util.*;
 
+import winsome.util.Common;
+
 public final class Command {
 
 	private final String id;
@@ -9,6 +11,7 @@ public final class Command {
 	private final List<String> args;
 	
 	public Command(String id, String param, List<String> args) {
+		Common.notNull(id);
 		this.id = id;
 		this.param = param;
 		this.args = new ArrayList<>();
