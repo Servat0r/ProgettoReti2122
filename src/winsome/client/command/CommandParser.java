@@ -2,10 +2,21 @@ package winsome.client.command;
 
 import java.io.*;
 import java.util.*;
+import java.util.function.*;
+
+import winsome.util.Common;
 
 
 public final class CommandParser implements AutoCloseable {
 	
+	private static final Predicate<String> testInt = new Predicate<>() {
+		public boolean test(String str) {
+			Common.notNull(str);
+			try { Integer.parseInt(str); return true; }
+			catch (Exception ex) { return false; }
+		}
+	};
+		
 	public static final String ALPHANUM = "[a-zA-Z0-9_]+";
 	public static final String LOWERNUM = "[a-z0-9_]+";
 	public static final String NUM = "[0-9]+";
@@ -42,16 +53,16 @@ public final class CommandParser implements AutoCloseable {
 		
 		HashMap<String, CommandArgs> showMap = new HashMap<>();
 		showMap.put("feed", null);
-		showMap.put("post", new CommandArgs(new String[]{NUM}) );
+		showMap.put("post", new CommandArgs(new String[]{NUM}, Arrays.asList(testInt)) );
 		
 		HashMap<String, CommandArgs> numMap = new HashMap<>();
-		numMap.put(null, new CommandArgs(new String[] {NUM}) );
+		numMap.put(null, new CommandArgs(new String[] {NUM}, Arrays.asList(testInt)) );
 		
 		HashMap<String, CommandArgs> rateMap = new HashMap<>();
-		rateMap.put( null, new CommandArgs(new String[] {NUM, RATE}) );
+		rateMap.put( null, new CommandArgs(new String[] {NUM, RATE}, Arrays.asList(testInt, null)) );
 		
 		HashMap<String, CommandArgs> commentMap = new HashMap<>();
-		commentMap.put( null, new CommandArgs(new String[] {NUM, QUOTED}) );
+		commentMap.put( null, new CommandArgs(new String[] {NUM, QUOTED}, Arrays.asList(testInt, null)) );
 		
 		HashMap<String, CommandArgs> walletMap = new HashMap<>();
 		walletMap.put(null, null);
@@ -62,21 +73,27 @@ public final class CommandParser implements AutoCloseable {
 		helpMap.put("cmd", new CommandArgs(new String[] {CommandDef.ID_PARAM_REGEX}) );
 		
 		this.cdefs = new HashSet<>();
+		
 		this.cdefs.add(new CommandDef("register", registerMap));
 		this.cdefs.add(new CommandDef("login", loginMap));
 		this.cdefs.add(new CommandDef("logout", idOnlyMap));
+		
 		this.cdefs.add(new CommandDef("list", listMap));
 		this.cdefs.add(new CommandDef("follow", userMap));
 		this.cdefs.add(new CommandDef("unfollow", userMap));
+		
 		this.cdefs.add(new CommandDef("blog", idOnlyMap));
 		this.cdefs.add(new CommandDef("post", postMap));
 		this.cdefs.add(new CommandDef("show", showMap));
+		
 		this.cdefs.add(new CommandDef("delete", numMap));
 		this.cdefs.add(new CommandDef("rewin", numMap));
 		this.cdefs.add(new CommandDef("rate", rateMap));
+		
 		this.cdefs.add(new CommandDef("comment", commentMap));
 		this.cdefs.add(new CommandDef("wallet", walletMap));
 		this.cdefs.add(new CommandDef("help", helpMap));
+		
 		this.cdefs.add(new CommandDef("quit", idOnlyMap));
 		this.cdefs.add(new CommandDef("exit", idOnlyMap));		
 	}

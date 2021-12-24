@@ -27,17 +27,24 @@ public final class Message {
 		new Pair<>("ok", null),
 		new Pair<>("error", new String[] {null, "parameter", "argument"}),
 		new Pair<>("register", null),
+		
 		new Pair<>("login", null),
 		new Pair<>("logout", null),
 		new Pair<>("list", new String[] {"users", "followers", "following"}),
-		new Pair<>("post", null),
-		new Pair<>("rate", null),
-		new Pair<>("comment", null),
-		new Pair<>("blog", null),
-		new Pair<>("show", new String[] {"feed", "post"}),
-		new Pair<>("wallet", new String[] {null, "btc"}),
+		
 		new Pair<>("follow", null),
 		new Pair<>("unfollow", null),
+		new Pair<>("blog", null),
+
+		new Pair<>("post", null),
+		new Pair<>("show", new String[] {"feed", "post"}),
+		new Pair<>("delete", null),
+		
+		new Pair<>("rewin", null),
+		new Pair<>("rate", null),
+		new Pair<>("comment", null),
+		
+		new Pair<>("wallet", new String[] {null, "btc"}),
 		new Pair<>("help", new String[] {null, "cmd"}),
 		new Pair<>("quit", null),
 		new Pair<>("exit", null)
