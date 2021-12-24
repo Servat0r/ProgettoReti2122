@@ -1,4 +1,4 @@
-package winsome.client;
+package winsome.client.command;
 
 import java.io.*;
 import java.util.*;

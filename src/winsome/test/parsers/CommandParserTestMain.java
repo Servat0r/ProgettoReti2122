@@ -1,8 +1,8 @@
-package winsome.test;
+package winsome.test.parsers;
 
 import java.io.FileInputStream;
 
-import winsome.client.*;
+import winsome.client.command.*;
 
 public final class CommandParserTestMain {
 	

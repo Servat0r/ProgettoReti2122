@@ -1,11 +1,11 @@
-package winsome.test;
+package winsome.test.msg;
 
 import java.net.*;
 import java.io.*;
 
 import winsome.common.msg.*;
 
-public final class MessageExchangeTestServerMain {
+public final class MessageIOTestServerMain {
 
 	public static final String HOST = "localhost";
 	public static final int PORT = 5000;

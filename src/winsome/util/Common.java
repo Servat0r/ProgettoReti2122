@@ -10,13 +10,67 @@ import java.util.concurrent.*;
 public final class Common {
 	
 	private Common() {}
+
+	/* PRINTING */
+	public static void printLn(Object obj) { System.out.println(obj); }
+	public static void printLn() { System.out.println(); }
+	public static void print(Object obj) { System.out.print(obj); }
+	public static void printf(String format, Object... args) { System.out.printf(format, args); }
+	public static void printErrLn(Object obj) { System.err.println(obj); }
+	public static void printErrLn() { System.err.println(); }
+	public static void printErr(Object obj) { System.err.print(obj); }
+	public static void printfErr(String format, Object... args) { System.err.printf(format, args); }
+	/* PRINTING */
 	
-	public static void notNull(Object obj) { if (obj == null) throw new NullPointerException(); }
+	/* DEBUGGING */
+	private static final String DEBUGSTR = "DEBUG : ";
+	public static final String DEBUGPROP = "debugMode";
 	
-	public static void positive(int n) { if (n <= 0) throw new IllegalArgumentException(); }
+	public static void setDebug() { System.setProperty(DEBUGPROP, "true"); }
+	public static void resetDebug() { System.setProperty(DEBUGPROP, "false"); }
+	public static void clearDebug() { System.clearProperty(DEBUGPROP); }
 	
-	public static void notNeg(int n) {if (n < 0) throw new IllegalArgumentException(); }
+	public static void debugln(String fname, Object obj) {
+		String debug = System.getProperty(DEBUGPROP);
+		if (debug != null && debug.equals("true")) Common.printLn(DEBUGSTR + fname + ": " + obj.toString());
+	}
 	
+	public static void debugln(Object obj) {
+		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
+		Common.debugln(fname, obj);
+	}
+		
+	public static void debugf(String fname, String format, Object... objs) {
+		String debug = System.getProperty(DEBUGPROP);
+		if (debug != null && debug.equals("true")) Common.printf(DEBUGSTR + fname + ": " + format, objs);
+	}
+	
+	public static void debugf(String format, Object... objs) {
+		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
+		Common.debugf(fname, format, objs);
+	}
+	/* DEBUGGING */
+	
+	/* PARAMS CHECKING */
+	public static void notNull(Object ...objs) {
+		for (Object obj : objs) if (obj == null) throw new NullPointerException();
+	}
+	
+	public static void positive(int ...nums) {
+		for (int n : nums) if (n <= 0) throw new IllegalArgumentException();
+	}
+	
+	public static void notNeg(int ...nums){
+		for (int n : nums) if (n < 0) throw new IllegalArgumentException();
+	}
+	
+	public static void checkAll(boolean ...conds) {
+		for (int i = 0; i < conds.length; i++) if (!conds[i]) throw new IllegalArgumentException("Condition #" + (i+1) +
+				" NOT satisfied!");
+	}
+	/* PARAMS CHECKING */
+	
+	/* BUILDING VALUES / DATA STRUCTURES */
 	public static Integer[] newIntegerArray(int length, int defValue) {
 		if (length <= 0) throw new IllegalArgumentException(); 
 		Integer[] result = new Integer[length];
@@ -45,15 +99,18 @@ public final class Common {
 		};
 	}
 	
-	public static Integer intFromByteArray(byte[] arr) {
-		if (arr.length != 4) return null;
+	public static Integer intFromByteArray(byte[] arr, int startIndex) {
+		Common.notNull(arr); Common.notNeg(startIndex);
+		if (startIndex + 3 >= arr.length) throw new IllegalArgumentException();
 		int num = 0;
-		num += ( ((int)arr[0]) << 24);
-		num += ( ((int)arr[1]) << 16);
-		num += ( ((int)arr[2]) << 8);
-		num += ( ((int)arr[3]) << 0);
+		num += ( ((int)arr[startIndex]) << 24);
+		num += ( ((int)arr[startIndex + 1]) << 16);
+		num += ( ((int)arr[startIndex + 2]) << 8);
+		num += ( ((int)arr[startIndex + 3]) << 0);
 		return num;
 	}
+	
+	public static Integer intFromByteArray(byte[] arr) { return intFromByteArray(arr, 0); }
 	
 	/**
 	 * Crea una nuova ConcurrentHashMap da una coppia di array della stessa lunghezza associando per ogni i l'i-esimo elemento 
@@ -85,4 +142,5 @@ public final class Common {
 		for (int i = 0; i < values.length; i++) set.add(values[i]);
 		return set;
 	}
+	/* BUILDING VALUES / DATA STRUCTURES */	
 }

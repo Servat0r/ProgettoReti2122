@@ -15,7 +15,7 @@ public final class MessageBuffer {
 	 * Enumerazione che rappresenta lo stato del ByteBuffer e i dati significativi che contiene.
 	 * INIT = buffer inizializzato, nessun dato significativo contenuto (position = 0, limit = capacity);
 	 * READ = appena compiuta un'operazione di lettura dati dal buffer (tranne getAllData()), dati significativi in [0, limit)
-	 * (position >= 0, normalizzabile con compact() a 0, limit <= capacity);
+	 * (limit >= position >= 0, normalizzabile con compact() a 0, limit <= capacity);
 	 * WRITTEN = appena compiuta un'operazione di scrittura dati nel buffer, dati significativi in [0, position)
 	 * (position >= 0, limit = capacity).
 	 * @author Salvatore Correnti
@@ -30,16 +30,21 @@ public final class MessageBuffer {
 	private State state;
 	
 	public MessageBuffer(int bufCap) {
-		if (bufCap <= 0) throw new IllegalArgumentException();
+		Common.positive(bufCap); /* NON è possibile allocare buffer di capacità 0 */
 		this.buffer = ByteBuffer.allocate(bufCap);
 		this.state = State.INIT;
 	}
+	
+	public final int position() { return this.buffer.position(); }
+	public final int limit() { return this.buffer.limit(); }
+	public final int capacity() { return this.buffer.capacity(); }
 	
 	/**
 	 * Se è appena stata compiuta una scrittura nel buffer, trasla i dati contenuti in [position, limit) in [0, limit-position),
 	 * dopodiché, a differenza di {@link ByteBuffer#compact()}, setta limit = limit-position e position = 0.
 	 * @return true se l'operazione è completata con successo, false se lo stato è diverso da State.READ o l'operazione
-	 * non è completata con successo.
+	 * non è completata con successo. Di conseguenza, se ritorna true lo stato del buffer è sempre State.READ, altrimenti se è
+	 * diverso da State.READ non è stata compiuta alcuna operazione.
 	 */
 	public boolean compact() {
 		if (this.state == State.INIT) return false;
@@ -63,6 +68,19 @@ public final class MessageBuffer {
 	}
 	
 	public Byte get() { return this.get(true); }
+	
+	public boolean put(byte b, boolean compact) {
+		if (this.state == State.READ) {
+			if (compact) this.compact();
+			this.buffer.position(this.buffer.limit());
+			this.buffer.limit(this.buffer.capacity());
+		}
+		this.state = State.WRITTEN;
+		try { this.buffer.put(b); return true; }
+		catch (BufferOverflowException boe) { return false; }
+	}
+	
+	public boolean put(byte b) { return this.put(b, true); }
 			
 	/**
 	 * Legge dati da un SocketChannel trasferendoli nel buffer interno e pone lo stato a State.WRITTEN .
@@ -140,7 +158,7 @@ public final class MessageBuffer {
 	 * @return Il numero di bytes copiati nel buffer.
 	 */
 	public int readFromArray(byte[] array, int offset, int length) {
-		Common.notNull(array);
+		Common.notNull(array); Common.notNeg(offset, length);
 		int maxCopy = Math.min(length, array.length - offset);
 		if (maxCopy <= 0) throw new IllegalArgumentException();
 		int copied = 0;
@@ -171,7 +189,8 @@ public final class MessageBuffer {
 	public int writeToArray(byte[] array, int offset, int length, boolean compact) {
 		Common.notNull(array);
 		int maxCopy = Math.min(length, array.length - offset);
-		if (maxCopy <= 0) throw new IllegalArgumentException();
+		if (maxCopy < 0) throw new IllegalArgumentException((length < 0 ? "length < 0" : "offset >= array.length"));
+		else if (maxCopy == 0) return 0; //{ Common.debugPrint("writeToArray", "array.length - offset = " + (array.length - offset)); return 0; }
 		if (this.state == State.INIT) return -1;
 		else if (this.state == State.WRITTEN) this.buffer.flip();
 		this.state = State.READ;
@@ -184,6 +203,38 @@ public final class MessageBuffer {
 	}
 
 	public int writeToArray(byte[] array, int offset, int length) { return this.writeToArray(array, offset, length, true); } 
+	
+	public void readAllFromArray(byte[] array, WritableByteChannel chan, boolean flush) throws IOException {
+		Common.notNull(array, chan);
+		int length = array.length;
+		int index = 0;
+		while (index < length) {
+			index += this.readFromArray(array, index, length);
+			if (this.isFull()) { while (this.hasRemaining()) this.writeToChannel(chan); }
+		}
+		if (flush) while (this.hasRemaining()) this.writeToChannel(chan);
+	}
+	
+	public void readAllFromArray(byte[] array, WritableByteChannel chan) throws IOException {
+		this.readAllFromArray(array, chan, true);
+	}
+	
+	public byte[] readAllToArray(int length, ReadableByteChannel chan) throws IOException {
+		Common.positive(length); Common.notNull(chan);
+		byte[] result = new byte[length];
+		int bRead = this.remaining(), index = 0;
+		int cRead;
+		Common.debugln("[start] : bRead = " + bRead);
+		while (bRead < length) {
+			cRead = this.readFromChannel(chan);
+			if (cRead == -1) return null;
+			else bRead += cRead;
+			if (this.isFull()) while (index < Math.min(bRead, length)) index += this.writeToArray(result, index, length);
+		}
+		Common.debugln("[end] : bRead = " + bRead + ", index = " + index);
+		while (index < length) index += this.writeToArray(result, index, length); 
+		return result;
+	}
 	
 	/**
 	 * Resetta il buffer allo stato INIT.
@@ -207,6 +258,15 @@ public final class MessageBuffer {
 	 * @return true sse this.remaining() > 0.
 	 */
 	public boolean hasRemaining() { return (this.remaining() > 0); }
+	
+	public boolean isFull() {
+		if (this.state == State.INIT) return false;
+		else if (this.state == State.WRITTEN) {
+			return (this.buffer.position() == this.buffer.capacity());
+		} else if (this.state == State.READ) {
+			return (this.buffer.limit() == this.buffer.capacity());
+		} else throw new IllegalStateException();
+	}
 	
 	/**
 	 * Prepares the buffer for a new reading operation, starting from 0 to the current limit.

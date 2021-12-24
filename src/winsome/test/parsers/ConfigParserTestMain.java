@@ -1,4 +1,4 @@
-package winsome.test;
+package winsome.test.parsers;
 
 import java.util.*;
 

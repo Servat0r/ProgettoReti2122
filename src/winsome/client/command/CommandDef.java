@@ -1,4 +1,4 @@
-package winsome.client;
+package winsome.client.command;
 
 import java.util.*;
 import java.util.regex.*;
@@ -11,17 +11,15 @@ public final class CommandDef {
 	public static final String SPACE = "[\s\t\f\r\n]";
 	public static final String SPACE_PLUS = SPACE + "+";
 	public static final String SPACE_STAR = SPACE + "*";
-	public static final String START = "^";
-	public static final String END = "$";
 	
 	private final String id;
 	private final HashMap<String, CommandArgs> args; /* param -> regex (eventualmente param = "") */
 	
 	public CommandDef(String id, HashMap<String, CommandArgs> args) {
-		if (!Pattern.matches(START + ID_PARAM_REGEX, id))
+		if (!Pattern.matches(ID_PARAM_REGEX, id))
 			throw new IllegalArgumentException(SYNTAX_ERROR[0] + "id" + SYNTAX_ERROR[1] + id + SYNTAX_ERROR[2]);
 		for (String key : args.keySet()) {
-			if ((key != null) && !Pattern.matches(START + ID_PARAM_REGEX, key))
+			if ((key != null) && !Pattern.matches(ID_PARAM_REGEX, key))
 				throw new IllegalArgumentException(SYNTAX_ERROR[0] + "parameter " + SYNTAX_ERROR[1] + key + SYNTAX_ERROR[2]);
 		}
 		this.id = id;

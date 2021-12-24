@@ -5,7 +5,7 @@ import java.net.SocketException;
 import java.nio.channels.*;
 import java.util.*;
 
-import winsome.client.*;
+import winsome.client.command.*;
 import winsome.util.*;
 
 /*
@@ -113,7 +113,19 @@ public final class Message {
 	}
 	
 	public Message(Command cmd) throws MessageException { this(cmd.getId(), cmd.getParam(), cmd.getArgs()); }
-
+	
+	public Message(byte idCode, byte paramCode, List<String> arguments) throws MessageException {
+		this.idCode = idCode;
+		this.paramCode = paramCode;
+		this.argN = (arguments != null ? arguments.size() : 0);
+		this.arguments = arguments;
+		int argsLen = 0;
+		if (arguments != null) {
+			for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
+		}
+		this.length = 6 + 4 * this.argN + argsLen;
+	}
+	
 	public static Message newOKMessage() throws MessageException { return new Message("ok", null, null); }
 	
 	public static Message newErrorMessage(int errType, String errVal, String errMsg) throws MessageException {
@@ -141,15 +153,45 @@ public final class Message {
 
 	public final int getLength() { return length; }
 	
-	//TODO Completare!
-	public void sendToChannel(WritableByteChannel chan, MessageBuffer buf) {
-		Common.notNull(chan); Common.notNull(buf);
+	public boolean sendToChannel(WritableByteChannel chan, MessageBuffer buf) throws IOException {
+		Common.notNull(chan, buf);
+		String cstr;
+		buf.clear();
+		try {
+			buf.readAllFromArray(new byte[] {idCode, paramCode}, chan);
+			buf.readAllFromArray(Common.intToByteArray(argN), chan);
+			for (int i = 0; i < argN; i++) {
+				cstr = arguments.get(i);
+				buf.readAllFromArray(Common.intToByteArray(cstr.length()), chan);
+				buf.readAllFromArray(cstr.getBytes(), chan);
+			}
+			return true;
+		} catch (SocketException ex) {
+			System.out.println("Connection closed by other peer");
+			return false;
+		}
 	}
 	
 	public static Message recvFromChannel(ReadableByteChannel chan, MessageBuffer buf)
 			throws IOException, MessageException {
-		Common.notNull(chan); Common.notNull(buf);
-		return new Message(null, null, null); //TODO Completare!
+		Common.notNull(chan, buf);
+		String cArg;
+		buf.clear();
+		byte[] readArr = buf.readAllToArray(6, chan);
+		if (readArr == null) return null; /* EOS reached etc. */
+		String[] strCodes = Message.getIdParam(readArr[0], readArr[1]);
+		int argN = Common.intFromByteArray(readArr, 2);
+		Common.debugf("after reading %d bytes: argN = %d%n", readArr.length, argN);		
+		List<String> arguments = new ArrayList<>();
+		for (int i = 0; i < argN; i++) {
+			readArr = buf.readAllToArray(4, chan);
+			int clen = Common.intFromByteArray(readArr);
+			readArr = buf.readAllToArray(clen, chan);
+			cArg = new String(readArr);
+			Common.debugf("arg #%d : %s (%d long)%n", i, cArg, clen);
+			arguments.add(cArg);
+		}
+		return new Message(strCodes[0], strCodes[1], arguments); //TODO Completare!
 	}
 	
 	public boolean sendToStream(OutputStream out) throws IOException {
@@ -165,7 +207,7 @@ public final class Message {
 			}
 			return true;
 		} catch (SocketException ex) {
-			System.out.println("Connection closed by other peer"); //Eventualmente sostituire con un PrintStream di log
+			Common.printLn("Connection closed by other peer"); //Eventualmente sostituire con un PrintStream di log
 			return false;
 		}
 	}
@@ -189,7 +231,7 @@ public final class Message {
 			}
 			return new Message(strCodes[0], strCodes[1], arguments);
 		} catch (SocketException ex) {
-			System.out.println("Connection closed by other peer");
+			Common.printLn("Connection closed by other peer");
 			return null;
 		}
 	}

@@ -1,8 +1,8 @@
-package winsome.test;
+package winsome.test.msg;
 
 import java.io.FileInputStream;
 
-import winsome.client.*;
+import winsome.client.command.*;
 import winsome.common.msg.*;
 
 public final class MessageTestMain {
