@@ -3,5 +3,6 @@ bin/
 .classpath
 .project
 note.txt
+debug.txt
 src/other/
 src/winsome/other/

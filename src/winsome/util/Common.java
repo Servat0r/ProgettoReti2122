@@ -1,7 +1,9 @@
 package winsome.util;
 
+import java.io.PrintStream;
 import java.util.*;
 import java.util.concurrent.*;
+
 
 /**
  * Operazioni e metodi comuni.
@@ -23,26 +25,40 @@ public final class Common {
 	/* PRINTING */
 	
 	/* DEBUGGING */
-	private static final String DEBUGSTR = "DEBUG : ";
-	public static final String DEBUGPROP = "debugMode";
+	private static final String DBGSEPAR = ": ";
+	private static PrintStream dbgStream = System.out;
+	private static final String DEBUGSTR = "DEBUG" + DBGSEPAR;
+	public static final String DEBUGPROP = "debug";
+	public static final String DEBUGFILE = "debug.txt";
 	
 	public static void setDebug() { System.setProperty(DEBUGPROP, "true"); }
 	public static void resetDebug() { System.setProperty(DEBUGPROP, "false"); }
 	public static void clearDebug() { System.clearProperty(DEBUGPROP); }
 	
+	public static void setDbgStream(String filename) {
+		Common.notNull(filename);
+		try { dbgStream = new PrintStream(filename); }
+		catch (Exception ex) { dbgStream = System.out; }
+	}
+	
+	public static void setDbgStream() { setDbgStream(DEBUGFILE); }
+	
+	public static void resetDgbStream() { dbgStream = System.out; }
+	
 	public static void debugln(String fname, Object obj) {
 		String debug = System.getProperty(DEBUGPROP);
-		if (debug != null && debug.equals("true")) Common.printLn(DEBUGSTR + fname + ": " + obj.toString());
+		if (debug != null && debug.equals("true"))
+			dbgStream.println( DEBUGSTR + fname + DBGSEPAR + (obj != null ? obj.toString() : "null") );
 	}
 	
 	public static void debugln(Object obj) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
 		Common.debugln(fname, obj);
 	}
-		
+	
 	public static void debugf(String fname, String format, Object... objs) {
 		String debug = System.getProperty(DEBUGPROP);
-		if (debug != null && debug.equals("true")) Common.printf(DEBUGSTR + fname + ": " + format, objs);
+		if (debug != null && debug.equals("true")) dbgStream.printf(DEBUGSTR + fname + DBGSEPAR + format, objs);
 	}
 	
 	public static void debugf(String format, Object... objs) {
@@ -51,10 +67,20 @@ public final class Common {
 	}
 	/* DEBUGGING */
 	
-	/* PARAMS CHECKING */
-	public static void notNull(Object ...objs) {
-		for (Object obj : objs) if (obj == null) throw new NullPointerException();
+	/* EXCEPTIONS MESSAGES FORMATTING */
+	public static String excStr(String msg) {
+		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
+		return (fname + DBGSEPAR + msg);
 	}
+	/* EXCEPTIONS MESSAGES FORMATTING */
+	
+	/* PARAMS CHECKING */
+	public static void notNull(String msg, Object ...objs) {
+		for (int i = 0; i < objs.length; i++) if (objs[i] == null)
+			throw new NullPointerException( excStr("arg #" + (i+1) + DBGSEPAR + msg) );
+	}
+	
+	public static void notNull(Object ...objs) { notNull("is null!", objs); }
 	
 	public static void positive(int ...nums) {
 		for (int n : nums) if (n <= 0) throw new IllegalArgumentException();
@@ -65,8 +91,13 @@ public final class Common {
 	}
 	
 	public static void checkAll(boolean ...conds) {
-		for (int i = 0; i < conds.length; i++) if (!conds[i]) throw new IllegalArgumentException("Condition #" + (i+1) +
-				" NOT satisfied!");
+		for (int i = 0; i < conds.length; i++)
+			if (!conds[i]) throw new IllegalArgumentException(Common.excStr("Condition #" + (i+1) + " NOT satisfied!"));
+	}
+	
+	public static void orAll(boolean ...conds) {
+		for (int i = 0; i < conds.length; i++) if (conds[i]) return;
+		throw new IllegalArgumentException(Common.excStr("No condition satisfied"));
 	}
 	/* PARAMS CHECKING */
 	
@@ -121,26 +152,33 @@ public final class Common {
 	 * @param values Valori della HashMap.
 	 * @return Una HashMap come già descritta in caso di successo, null altrimenti.
 	 */
-	public static <K,V> ConcurrentMap<K, V> newConcurrentHashMapFromArrays(K[] keys, V[] values){
-		if (keys.length != values.length) return null;
-		int size = keys.length;
+	public static <K,V> ConcurrentMap<K, V> newConcurrentHashMapFromLists(List<K> keys, List<V> values){
+		if (keys.size() != values.size()) return null;
+		int size = keys.size();
 		ConcurrentMap<K,V> map = new ConcurrentHashMap<>();
-		for (int i = 0; i < size; i++) map.put(keys[i], values[i]);
+		for (int i = 0; i < size; i++) map.put(keys.get(i), values.get(i));
 		return map;
 	}
 	
-	public static <K,V> HashMap<K, V> newHashMapFromArrays(K[] keys, V[] values){
-		if (keys.length != values.length) return null;
-		int length = keys.length;
+	public static <K,V> HashMap<K, V> newHashMapFromLists(List<K> keys, List<V> values){
+		if (keys.size() != values.size()) return null;
+		int size = keys.size();
 		HashMap<K,V> map = new HashMap<>();
-		for (int i = 0; i < length; i++) map.put(keys[i], values[i]);
+		for (int i = 0; i < size; i++) map.put(keys.get(i), values.get(i));
 		return map;
 	}
 	
-	public static <T> HashSet<T> newHashSetFromArray(T[] values){
+	public static <T> HashSet<T> newHashSetFromArray(List<T> values){
 		HashSet<T> set = new HashSet<>();
-		for (int i = 0; i < values.length; i++) set.add(values[i]);
+		for (int i = 0; i < values.size(); i++) set.add(values.get(i));
 		return set;
+	}
+	
+	public static String newCharSeq(int length, char c) {
+		Common.notNeg(length);
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < length; i++) { sb.append(c); }
+		return sb.toString();
 	}
 	/* BUILDING VALUES / DATA STRUCTURES */	
 }

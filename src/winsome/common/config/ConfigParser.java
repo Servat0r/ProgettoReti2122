@@ -7,10 +7,13 @@ import java.util.regex.*;
 public final class ConfigParser {
 
 	public static final String ASSIGNMENT = "^[\s\t]*[A-Za-z]+[a-zA-Z0-9_\\.]*[\s\t]*=[\s\t]*[^\s\t=]+$";
-		
+	
 	private ConfigParser() {}
 	
-	public static final Map<String, String> parseFile(String filename) throws FileNotFoundException, IOException, ConfigParsingException {
+	public static final int UPPER = 2;
+	public static final int LOWER = 1;
+	
+	public static final Map<String, String> parseFile(String filename, int flags) throws FileNotFoundException, IOException, ConfigParsingException {
 		if (filename == null) throw new NullPointerException();
 		Map<String, String> result;
 		String nextLine;
@@ -21,7 +24,9 @@ public final class ConfigParser {
 		){
 			result = new HashMap<>();
 			while (s.hasNextLine()) {
-				nextLine = s.nextLine().trim();
+				nextLine = s.nextLine().strip();
+				if ((flags & LOWER) != 0) { nextLine = nextLine.toLowerCase(); }
+				if ((flags & UPPER) != 0) { nextLine = nextLine.toUpperCase(); }
 				currentLine++;				
 				if (nextLine.equals("") || nextLine.startsWith("#")) continue;
 				else if (Pattern.matches(ASSIGNMENT, nextLine)) {
@@ -34,5 +39,10 @@ public final class ConfigParser {
 			}
 			return result;
 		}
-	}	
+	}
+	
+	public static final Map<String, String> parseFile(String filename) throws FileNotFoundException, IOException, ConfigParsingException {
+		return parseFile(filename, 0);
+	}
+	
 }

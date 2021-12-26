@@ -9,10 +9,10 @@ import winsome.util.Common;
 
 public final class CommandParser implements AutoCloseable {
 	
-	private static final Predicate<String> testInt = new Predicate<>() {
+	private static final Predicate<String> testLong = new Predicate<>() {
 		public boolean test(String str) {
 			Common.notNull(str);
-			try { Integer.parseInt(str); return true; }
+			try { Long.parseLong(str); return true; }
 			catch (Exception ex) { return false; }
 		}
 	};
@@ -53,16 +53,16 @@ public final class CommandParser implements AutoCloseable {
 		
 		HashMap<String, CommandArgs> showMap = new HashMap<>();
 		showMap.put("feed", null);
-		showMap.put("post", new CommandArgs(new String[]{NUM}, Arrays.asList(testInt)) );
+		showMap.put("post", new CommandArgs(new String[]{NUM}, Arrays.asList(testLong)) );
 		
 		HashMap<String, CommandArgs> numMap = new HashMap<>();
-		numMap.put(null, new CommandArgs(new String[] {NUM}, Arrays.asList(testInt)) );
+		numMap.put(null, new CommandArgs(new String[] {NUM}, Arrays.asList(testLong)) );
 		
 		HashMap<String, CommandArgs> rateMap = new HashMap<>();
-		rateMap.put( null, new CommandArgs(new String[] {NUM, RATE}, Arrays.asList(testInt, null)) );
+		rateMap.put( null, new CommandArgs(new String[] {NUM, RATE}, Arrays.asList(testLong, null)) );
 		
 		HashMap<String, CommandArgs> commentMap = new HashMap<>();
-		commentMap.put( null, new CommandArgs(new String[] {NUM, QUOTED}, Arrays.asList(testInt, null)) );
+		commentMap.put( null, new CommandArgs(new String[] {NUM, QUOTED}, Arrays.asList(testLong, null)) );
 		
 		HashMap<String, CommandArgs> walletMap = new HashMap<>();
 		walletMap.put(null, null);

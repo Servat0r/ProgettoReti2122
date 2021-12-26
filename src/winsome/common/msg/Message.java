@@ -26,6 +26,8 @@ public final class Message {
 	public static final List< Pair<String, String[]> > CODES = Arrays.asList(
 		new Pair<>("ok", null),
 		new Pair<>("error", new String[] {null, "parameter", "argument"}),
+		new Pair<>("userList", null),
+		new Pair<>("multicast", null),
 		new Pair<>("register", null),
 		
 		new Pair<>("login", null),
