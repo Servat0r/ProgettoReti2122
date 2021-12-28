@@ -10,4 +10,5 @@ public interface ServerInterface {
 		
 	public boolean followersRegister(ClientInterface client);
 	public boolean followersUnregister(ClientInterface client);
+	public boolean isRegistered(ClientInterface client);
 }
