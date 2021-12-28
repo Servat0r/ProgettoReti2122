@@ -1,5 +1,7 @@
 package winsome.util;
 
+import java.util.Objects;
+
 public final class Pair<K,V> {
 
 	private K key;
@@ -25,4 +27,7 @@ public final class Pair<K,V> {
 	public final void setValue(V value) {
 		this.value = value;
 	}
+
+	public int hashCode() { return Objects.hash(key); }
+
 }

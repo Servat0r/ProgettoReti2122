@@ -6,7 +6,7 @@ import winsome.common.config.*;
 
 public final class ConfigParserTestMain {
 
-	private static final String DFL_FNAME = "config.txt";
+	private static final String DFL_FNAME = "clientConfig.txt";
 	
 	public static void main(String[] args) {
 		String filename = (args.length > 0 ? args[0] : DFL_FNAME);

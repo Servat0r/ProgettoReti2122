@@ -1,18 +1,19 @@
 package winsome.util;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.util.*;
 import java.util.concurrent.*;
 
 
 /**
- * Operazioni e metodi comuni.
+ * Common tools and operations.
  * @author Salvatore Correnti.
  */
 public final class Common {
 	
 	private Common() {}
-
+	
 	/* PRINTING */
 	public static void printLn(Object obj) { System.out.println(obj); }
 	public static void printLn() { System.out.println(); }
@@ -28,32 +29,63 @@ public final class Common {
 	private static final String DBGSEPAR = ": ";
 	private static PrintStream dbgStream = System.out;
 	private static final String DEBUGSTR = "DEBUG" + DBGSEPAR;
-	public static final String DEBUGPROP = "debug";
-	public static final String DEBUGFILE = "debug.txt";
+	public static final String DEBUGPROP = "debug"; /* System property for enabling debugging. */
+	public static final String DEBUGFILE = "debug.txt"; /* Default debug file. */
 	
+	/**
+	 * Enables debug printings.
+	 */
 	public static void setDebug() { System.setProperty(DEBUGPROP, "true"); }
+	
+	/**
+	 * Disables debug printings.
+	 */
 	public static void resetDebug() { System.setProperty(DEBUGPROP, "false"); }
+	
+	/**
+	 * Clears debug property.
+	 */
 	public static void clearDebug() { System.clearProperty(DEBUGPROP); }
 	
-	public static void setDbgStream(String filename) {
+	/**
+	 * Sets debug file to the specified filename.
+	 * @param filename (Relative) path of the file.
+	 */
+	public static synchronized void setDbgFile(String filename) {
 		Common.notNull(filename);
 		try { dbgStream = new PrintStream(filename); }
 		catch (Exception ex) { dbgStream = System.out; }
 	}
 	
-	public static void setDbgStream() { setDbgStream(DEBUGFILE); }
+	/**
+	 * Sets debug file to default value.
+	 */
+	public static synchronized void setDbgFile() { setDbgFile(DEBUGFILE); }
 	
-	public static void resetDgbStream() { dbgStream = System.out; }
+	/**
+	 * Sets debug printing to default stream (System.out).
+	 */
+	public static synchronized void resetDgbStream() { dbgStream = System.out; }
 	
+	/**
+	 * Prints a line of the form "DEBUG: 'fname' : [obj.toString()]".
+	 * @param fname Message of the debug line.
+	 * @param obj Object to debug (prints 'null' if null, otherwise invokes obj.toString()).
+	 */
 	public static void debugln(String fname, Object obj) {
 		String debug = System.getProperty(DEBUGPROP);
 		if (debug != null && debug.equals("true"))
 			dbgStream.println( DEBUGSTR + fname + DBGSEPAR + (obj != null ? obj.toString() : "null") );
 	}
 	
+	/**
+	 * Debug printing indicating the invoking function and the current source code line.
+	 * @param obj Object to debug (prints 'null' if null, otherwise invokes obj.toString()).
+	 */
 	public static void debugln(Object obj) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
-		Common.debugln(fname, obj);
+		int fline = Thread.currentThread().getStackTrace()[2].getLineNumber();
+		Common.debugln(fname + (fline >= 0 ? " at line " + fline : ""), obj);
 	}
 	
 	public static void debugf(String fname, String format, Object... objs) {
@@ -63,7 +95,14 @@ public final class Common {
 	
 	public static void debugf(String format, Object... objs) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
-		Common.debugf(fname, format, objs);
+		int fline = Thread.currentThread().getStackTrace()[2].getLineNumber();
+		Common.debugf(fname + (fline >= 0 ? " at line" + fline : ""), format, objs);
+	}
+		
+	public static void exit(int code) {
+		String debug = System.getProperty(DEBUGPROP);
+		if (debug != null && debug.equals("true") && (dbgStream != System.out)) { dbgStream.close(); dbgStream = System.out; }
+		System.exit(code);
 	}
 	/* DEBUGGING */
 	
@@ -71,6 +110,11 @@ public final class Common {
 	public static String excStr(String msg) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
 		return (fname + DBGSEPAR + msg);
+	}
+	
+	public static boolean isConnReset(IOException ioe) {
+		Common.notNull(ioe);
+		return ioe.getMessage().contains("Connection reset");
 	}
 	/* EXCEPTIONS MESSAGES FORMATTING */
 	
@@ -180,5 +224,5 @@ public final class Common {
 		for (int i = 0; i < length; i++) { sb.append(c); }
 		return sb.toString();
 	}
-	/* BUILDING VALUES / DATA STRUCTURES */	
+	/* BUILDING VALUES / DATA STRUCTURES */
 }
