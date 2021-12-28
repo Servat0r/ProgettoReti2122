@@ -3,7 +3,6 @@ package winsome.client;
 import java.rmi.*;
 import java.rmi.server.*;
 import java.util.*;
-import java.util.concurrent.*;
 
 import winsome.common.rmi.ClientInterface;
 import winsome.util.Common;
@@ -31,8 +30,4 @@ final class ClientInterfaceImpl extends UnicastRemoteObject implements ClientInt
 		return client.removeFollower(username, tags);
 	}
 
-	public boolean loadFollowers(ConcurrentMap<String, List<String>> followers) throws RemoteException {
-		Common.notNull(followers);
-		return client.setFollowers(followers);
-	}
 }

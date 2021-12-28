@@ -20,15 +20,17 @@ public final class CommandParser implements AutoCloseable {
 	public static final String ALPHANUM = "[a-zA-Z0-9_]+";
 	public static final String LOWERNUM = "[a-z0-9_]+";
 	public static final String NUM = "[0-9]+";
-	public static final String QUOTED = "[\"][^\"]*[\"]";
+	public static final String QUOTED = "[\"][^\"]+[\"]"; /* Empty titles and contents NOT allowed! */
 	public static final String RATE = "(\\+|\\-)1";
 	
 	private final Set<CommandDef> cdefs;
 	private final Scanner input;
+	private boolean closed;
 	
 	public CommandParser(InputStream input) {
 		
 		this.input = new Scanner(input);
+		this.closed = false;
 		
 		HashMap<String, CommandArgs> registerMap = new HashMap<>();
 		registerMap.put( null, new CommandArgs( new String[] {ALPHANUM, ALPHANUM, LOWERNUM, LOWERNUM, LOWERNUM, LOWERNUM, LOWERNUM}, 3, 7) );
@@ -117,6 +119,9 @@ public final class CommandParser implements AutoCloseable {
 	
 	public boolean hasNextCmd() { return this.input.hasNextLine(); }
 	
-	public void close() throws Exception { this.input.close(); }
-		
+	public synchronized void close() throws Exception {
+		if (!closed) { this.input.close(); closed = true; }
+	}
+	
+	public synchronized boolean isClosed() { return closed; }
 }

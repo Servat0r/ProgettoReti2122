@@ -4,7 +4,7 @@ import java.util.*;
 
 import winsome.util.*;
 
-public final class Help {
+final class Help {
 
 	private Help() {}
 
@@ -38,31 +38,75 @@ public final class Help {
 		"exit"
 	);
 	
+	private static final Map<String, String> quitMap = newMap(list(""), list("Closes this program if user is logged out"));
+	
 	private static final Map<String, Map<String, String>> HELPS = newMap(
 		COMMANDS,
 		list(
-			newMap(list("<username> <password> <taglist>"), list("Registration")),
-			newMap(list("<username> <password>"), list("Login")),
-			newMap(list("<username>"), list("Logout")),
-
-			newMap(list("users", "followers", "following"), list("ListUsers", "ListFers", "ListFwing")),
-			newMap(list("<username>"), list("Follow")),
-			newMap(list("<username>"), list("Unfollow")),
-
-			newMap(list(""), list("Blog")),
-			newMap(list("<title> <content>"), list("Post")),
-			newMap(list("feed", "post <idPost>"), list("Show feed", "Show post")),
-
-			newMap(list("<idPost>"), list("Delete")),
-			newMap(list("<idPost>"), list("Rewin")),
-			newMap(list("<idPost> <vote>"), list("Rate")),
-
-			newMap(list("<idPost> <comment>"), list("Comment")),
-			newMap(list("", "btc"), list("Wallet", "Wallet in bitcoin")),
-			newMap(list("", "cmd <command>"), list("shows this help guide for all commands", "shows help message for the command specified")),
-
-			newMap(list(""), list("Closes this program if user is logged out")),
-			newMap(list(""), list("Closes this program if user is logged out"))
+			newMap(
+				list("<username> <password> <taglist>"),
+				list("Register to WinSome with the specified username and password and the list of tags <taglist>.\n"
+						+ "A username is a unique identifier in alphanumeric characters (a-z, A-Z, 0-9 and _).\n "
+						+ "You must provide at least one tag and at most five ones; the only characters allowed for a "
+						+ "tag are lowercase letters (a-z), cyphers (0-9) and underscore (_).")
+			),
+			newMap(
+				list("<username> <password>"),
+				list("Login to WinSome with ...")
+			),
+			newMap(
+				list("<username>"),
+				list("Logout")
+			),
+			newMap(
+				list("users", "followers", "following"),
+				list("ListUsers", "ListFers", "ListFwing")
+			),
+			newMap(
+				list("<username>"),
+				list("Follow")
+			),
+			newMap(
+				list("<username>"),
+				list("Unfollow")
+			),
+			newMap(
+				list(""),
+				list("Blog")
+			),
+			newMap(
+				list("<title> <content>"),
+				list("Post")
+			),
+			newMap(
+				list("feed", "post <idPost>"),
+				list("Show feed", "Show post")
+			),
+			newMap(
+				list("<idPost>"),
+				list("Delete")
+			),
+			newMap(
+				list("<idPost>"),
+				list("Rewin")
+			),
+			newMap(
+				list("<idPost> <vote>"),
+				list("Rate")
+			),
+			newMap(
+				list("<idPost> <comment>"),
+				list("Comment")
+			),
+			newMap(
+				list("", "btc"),
+				list("Wallet", "Wallet in bitcoin")
+			),
+			newMap(
+				list("", "cmd <command>"),
+				list("shows this help guide for all commands", "shows help message for the command specified")
+			),
+			quitMap, quitMap
 		)
 	);
 	

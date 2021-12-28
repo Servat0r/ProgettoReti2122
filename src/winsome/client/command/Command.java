@@ -1,5 +1,7 @@
 package winsome.client.command;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.*;
 
 import winsome.util.Common;
@@ -24,12 +26,19 @@ public final class Command {
 	
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
-		sb.append("Command [id = '" + id + (param != null ? "'; param = '" + param : "") + "'; args = {");
-		for (int i = 0; i < args.size(); i++) {
-			if (i > 0) sb.append(", ");
-			sb.append("'" + args.get(i) + "'");
-		}
-		sb.append("}]");
+		sb.append(this.getClass().getSimpleName() + " [");
+		try {
+			Field[] fields = this.getClass().getDeclaredFields();
+			boolean first = false;
+			for (int i = 0; i < fields.length; i++) {
+				Field f = fields[i];
+				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
+					sb.append( (first ? ", " : "") + f.getName() + " = " + f.get(this) );
+					if (!first) first = true;
+				}
+			}
+		} catch (IllegalAccessException ex) { return null; }
+		sb.append("]");
 		return sb.toString();
 	}
 }
