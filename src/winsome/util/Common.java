@@ -14,6 +14,19 @@ public final class Common {
 	
 	private Common() {}
 	
+	/* QUOTING */
+	public static String quote(String str) {
+		Common.notNull(str);
+		return new String("\"" + str + "\"");
+	}
+	
+	public static String dequote(String str) {
+		Common.notNull(str);
+		if (str.startsWith("\"") && str.endsWith("\"")) return str.substring(1, str.length()-1);
+		else return new String(str);
+	}
+	/* QUOTING */
+		
 	/* PRINTING */
 	public static void printLn(Object obj) { System.out.println(obj); }
 	public static void printLn() { System.out.println(); }
@@ -98,7 +111,9 @@ public final class Common {
 		int fline = Thread.currentThread().getStackTrace()[2].getLineNumber();
 		Common.debugf(fname + (fline >= 0 ? " at line" + fline : ""), format, objs);
 	}
-		
+	
+	public static void debugExc(Exception ex) { ex.printStackTrace(dbgStream); }
+	
 	public static void exit(int code) {
 		String debug = System.getProperty(DEBUGPROP);
 		if (debug != null && debug.equals("true") && (dbgStream != System.out)) { dbgStream.close(); dbgStream = System.out; }

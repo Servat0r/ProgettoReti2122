@@ -3,13 +3,19 @@ package winsome.util;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.*;
+import java.io.*;
+
+import com.google.gson.*;
+import com.google.gson.stream.*;
 
 import winsome.client.command.CommandParser;
 
-public final class SerializationUtils {
+public final class Serialization {
 	
-	private SerializationUtils() {}
+	private Serialization() {}
 
+	public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+		
 	public static final String
 		SEPAR = " #",
 		ALPHANUM = CommandParser.ALPHANUM,
@@ -20,6 +26,16 @@ public final class SerializationUtils {
 		CMAP_ENTRY = ALPHANUM + SEPAR + NUM + "[( " + LOWERNUM + ")]+",
 		//id #author #title
 		POSTLIST_ENTRY = (NUM + SEPAR) + (ALPHANUM + SEPAR) + QUOTED;
+	
+	public static final JsonWriter fileWriter(String filename) throws IOException {
+		try { return GSON.newJsonWriter( new OutputStreamWriter(new FileOutputStream(filename)) ); }
+		catch (FileNotFoundException ex) { return null; }
+	}
+	
+	public static final JsonReader fileReader(String filename) {
+		try { return GSON.newJsonReader( new InputStreamReader(new FileInputStream(filename)) ); }
+		catch (FileNotFoundException ex) { return null; }
+	}
 	
 	public static List<String> serializeMap(ConcurrentMap<String, List<String>> map){
 		Common.notNull(map);

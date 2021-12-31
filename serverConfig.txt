@@ -1,0 +1,51 @@
+# File di configurazione del server
+# Indirizzo del server
+SERVER		=	192.168.1.120
+
+# Porta TCP del server
+TCPPORT		=	6666
+
+# Porta UDP del server
+UDPPORT		=	33333
+
+# Indirizzo di multicast
+MULTICAST	=	239.255.32.32
+
+# Porta di multicast
+MCASTPORT	=	44444
+
+# Porta del registry RMI
+REGPORT		=	7777
+
+# Timeout della socket
+TIMEOUT		=	100000
+
+# File json del server
+SERVERJSON	=	server.json
+
+# File json del server
+USERJSON	=	users.json
+
+# File json del server
+POSTJSON	=	posts.json
+
+# Periodo di calcolo ricompense
+RWPERIOD	=	2
+
+# TimeUnit per il periodo di calcolo ricompense
+RWPERIODUNIT	=	MINUTES
+
+# Percentuale ricompensa autore (0-100)
+RWAUTHPERC	=	70
+
+# Percentuale ricompensa curatori (0-100)
+RWCURPERC	=	30
+
+# Numero di core threads del pool (se < 0, settato automaticamente al numero di processori disponibili)
+COREPOOLSIZE	=	-1
+
+# Massimo numero di threads del pool (se < 0, settato automaticamente al doppio del numero di processori disponibili)
+MAXPOOLSIZE	=	-1
+
+# Tempo di vita in idle dei non-core threads del pool (se < 0, settato automaticamente a 1 minuto)
+KEEPALIVETIME	=	-1

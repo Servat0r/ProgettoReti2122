@@ -1,8 +1,4 @@
-
-# Questo è un esempio di file di configurazione.
-# Tutte le righe vuote o che iniziano con '#' verranno ignorate.
-#
-
+# File di configurazione del client
 # Indirizzo del server
 SERVER		=	192.168.1.2
 
