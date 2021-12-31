@@ -5,11 +5,13 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Function;
 import java.net.*;
 import java.rmi.*;
 import java.rmi.registry.*;
 
 import winsome.client.command.*;
+import winsome.common.config.ConfigUtils;
 import winsome.common.msg.*;
 import winsome.common.rmi.*;
 import winsome.util.*;
@@ -42,9 +44,8 @@ public final class WinsomeClient implements AutoCloseable {
 	private Socket tcpSocket = null;
 	private InputStream tcpIn = null;
 	private OutputStream tcpOut = null;
-	private int soTimeout = 0;
 	
-	private WalletNotifier mcastThread = null;
+	private ClientWalletNotifier mcastThread = null;
 	
 	private String regHost = null;
 	private int regPort = 0;
@@ -332,14 +333,9 @@ public final class WinsomeClient implements AutoCloseable {
 		}
 	}
 
-	boolean removeFollower(String username, List<String> tags) {
-		Common.notNull(username, tags);
-		synchronized (this.followers) {
-			if (this.followers.containsKey(username)) {
-				this.followers.remove(username);
-				return true;
-			} else return false;
-		}
+	boolean removeFollower(String username) {
+		Common.notNull(username);
+		synchronized (this.followers) { return (this.followers.remove(username) != null); }
 	}
 
 	/**
@@ -350,59 +346,37 @@ public final class WinsomeClient implements AutoCloseable {
 	 * @throws NotBoundException Thrown by this.reg::lookup.
 	 * @throws IOException If an IO error occurs.
 	 */
-	public WinsomeClient(Map<String, String> configMap) throws FileNotFoundException, RemoteException,
-		NotBoundException, IOException {
-		String cval;
+	public WinsomeClient(Map<String, String> configMap) throws RemoteException, NotBoundException, IOException {
+		Common.notNull(configMap);
+		
+		Function<String, String> newStr = ConfigUtils.newStr;
+		Function<String, Integer> newInt = ConfigUtils.newInt;
+		Function<String, InputStream> newInStr = ConfigUtils.newInputStream;
+		Function<String, PrintStream> newPrStr = ConfigUtils.newPrintStream;
+		
 		if (configMap != null) {
-			cval = configMap.get("reghost");
-			if (cval != null) this.regHost = new String(cval);
-			cval = configMap.get("server");
-			if (cval != null) this.serverHost = new String(cval);
-			cval = configMap.get("tcpport");
-			if (cval != null) {
-				try {this.tcpPort = Integer.parseInt(cval);}
-				catch (NumberFormatException ex)
-				{throw new IllegalArgumentException(Common.excStr(cval + "is not a correct integer!"));}
-			}
-			cval = configMap.get("regport");
-			if (cval != null) {
-				try {this.regPort = Integer.parseInt(cval);}
-				catch (NumberFormatException ex)
-				{throw new IllegalArgumentException(Common.excStr(cval + "is not a correct integer!"));}
-			}
-			cval = configMap.get("timeout");
-			if (cval != null) {
-				try {this.soTimeout = Integer.parseInt(cval);}
-				catch (NumberFormatException ex)
-				{throw new IllegalArgumentException(Common.excStr(cval + "is not a correct integer!"));}
-			}
-			cval = configMap.get("input");
-			if (cval != null) this.in = new FileInputStream(cval);
-			cval = configMap.get("output");
-			if (cval != null) this.out = new PrintStream(cval);
-			cval = configMap.get("error");
-			if (cval != null) this.err = new PrintStream(cval);
+			regHost = ConfigUtils.setValue(configMap, "reghost", newStr, "localhost");
+			serverHost = ConfigUtils.setValue(configMap, "server", newStr, "127.0.0.1");
+			tcpPort = ConfigUtils.setValue(configMap, "tcpport", newInt, 0);
+			regPort = ConfigUtils.setValue(configMap, "regport", newInt, 0);
+			in = ConfigUtils.setValue(configMap, "input", newInStr, System.in);
+			out = ConfigUtils.setValue(configMap, "output", newPrStr, System.out);
+			err = ConfigUtils.setValue(configMap, "error", newPrStr, System.err);
 		}
 		this.parser = new CommandParser(in);
 		this.clHandler = new ClientInterfaceImpl(this);
 		
-		Common.debugln(this);
-		
 		this.tcpSocket = new Socket(this.serverHost, this.tcpPort);
-		this.tcpSocket.setSoTimeout(this.soTimeout);
 		this.tcpIn = this.tcpSocket.getInputStream();
 		this.tcpOut = this.tcpSocket.getOutputStream();
 		
 		this.reg = LocateRegistry.getRegistry(regHost, regPort);
 		this.svHandler = (ServerInterface) this.reg.lookup(ServerInterface.REGSERVNAME);
-		Common.debugln(this);
 		this.out.println(INTRO);
 	}
 	
 	public WinsomeClient() throws FileNotFoundException, RemoteException, NotBoundException, IOException { this(null); }
 	
-	public final String getUser() { return new String(this.username); }
-
 	public final String getHost() { return this.serverHost; }
 
 	public final InputStream getIn() { return this.in; }
@@ -430,7 +404,7 @@ public final class WinsomeClient implements AutoCloseable {
 		return retCode;
 	}
 	
-	public boolean register(String username, String password, List<String> tags) {
+	public boolean register(String username, String password, List<String> tags) throws RemoteException {
 		Common.notNull(username, password, tags);
 		return this.svHandler.register(username, password, tags);
 	}
@@ -456,12 +430,12 @@ public final class WinsomeClient implements AutoCloseable {
 					mcastMsgLen = Integer.parseInt(l.get(3));
 				} catch (NumberFormatException nfe)
 					{ return this.printfError("<%s, %s> are not valid integers!%n", l.get(2), l.get(3)); }
-				this.mcastThread = new WalletNotifier(this, mcastPort, mcastAddr, mcastMsgLen);
+				this.mcastThread = new ClientWalletNotifier(this, mcastPort, mcastAddr, mcastMsgLen);
 				this.mcastThread.setDaemon(true);
 				this.mcastThread.start();
-				if ( !this.setFollowers( SerializationUtils.deserializeMap( l.subList(4, l.size()) ) ) )
+				if ( !this.setFollowers( Serialization.deserializeMap( l.subList(4, l.size()) ) ) )
 					{ return this.printError("when retrieving current followers"); }
-				if ( !this.svHandler.followersRegister(this.clHandler))
+				if ( !this.svHandler.followersRegister(this.getUsername(), this.clHandler))
 					{ return this.printError("when registering for followers updates"); }
 				this.setState(State.COMM);
 				return this.printOK(l.get(0));
@@ -487,7 +461,7 @@ public final class WinsomeClient implements AutoCloseable {
 				/* Closing multicast handling thread (does NOT join the other thread!) */
 				if (this.mcastThread != null) this.mcastThread.close();
 				/* Deregistering for followers updates */
-				if ( !this.svHandler.followersUnregister(clHandler) )
+				if ( !this.svHandler.followersUnregister(this.getUsername()) )
 					{ return this.printError("when unregistering for followers updates"); }
 				/* Clearing followers list */
 				this.clearFollowers();
@@ -510,7 +484,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (id.equals(Message.OK)) {
 					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
 					List<String> l = msg.getArguments();
-					ConcurrentMap<String, List<String>> map = SerializationUtils.deserializeMap(l.subList(1, l.size()));
+					ConcurrentMap<String, List<String>> map = Serialization.deserializeMap(l.subList(1, l.size()));
 					if (map == null) return this.printError("when retrieving users list");
 					String output = this.formatUserList(map);
 					if (output == null) return this.printError("when formatting users list output");
@@ -539,7 +513,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (id.equals(Message.OK)) {
 					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
 					List<String> l = msg.getArguments();
-					ConcurrentMap<String, List<String>> map = SerializationUtils.deserializeMap(l.subList(1, l.size()));
+					ConcurrentMap<String, List<String>> map = Serialization.deserializeMap(l.subList(1, l.size()));
 					if (map == null) return this.printError("when retrieving following users list");
 					String output = this.formatUserList(map);
 					if (output == null) return this.printError("when formatting following users list output");
@@ -571,7 +545,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (id.equals(Message.OK)) {
 					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
 					List<String> l = msg.getArguments();
-					List<List<String>> posts = SerializationUtils.deserializePostList(l.subList(1, l.size()));
+					List<List<String>> posts = Serialization.deserializePostList( l.subList(1, l.size()) );
 					if (posts == null) return this.printError("when getting post list");
 					String output = this.formatPostList(posts);
 					if (output == null) return this.printError("when formatting post list");
@@ -582,6 +556,7 @@ public final class WinsomeClient implements AutoCloseable {
 		} catch (MessageException mex) { mex.printStackTrace(err); return false; }
 	}
 	
+	//TODO La risposta del server dovrà contenere l'id del post (visualizzato a schermo)
 	public boolean createPost(String title, String content) throws IOException {
 		Common.notNull(title, content);
 		title = title.substring(1, title.length()-1);
@@ -600,7 +575,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (id.equals(Message.OK)) {
 					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
 					List<String> l = msg.getArguments();
-					List<List<String>> posts = SerializationUtils.deserializePostList(l.subList(1, l.size()));
+					List<List<String>> posts = Serialization.deserializePostList(l.subList(1, l.size()));
 					if (posts == null) return this.printError("when getting post list");
 					String output = this.formatPostList(posts);
 					if (output == null) return this.printError("when formatting post list");
@@ -706,7 +681,8 @@ public final class WinsomeClient implements AutoCloseable {
 			this.mcastThread.close();
 			this.mcastThread.join();
 		}
-		if (this.svHandler.isRegistered(clHandler)) this.svHandler.followersUnregister(clHandler);
+		String user = this.getUsername();
+		if (this.svHandler.isRegistered(user)) this.svHandler.followersUnregister(user);
 		if (this.isUserSet()) this.unsetUsername();
 		this.clearFollowers();
 		this.out.println(EXIT);

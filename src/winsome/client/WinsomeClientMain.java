@@ -8,7 +8,7 @@ final class WinsomeClientMain {
 	public static final String CONFIG_FNAME = "clientConfig.txt";
 	
 	public static void main(String[] args) {
-		Common.setDebug(); Common.setDbgFile();
+		Common.setDebug(); Common.setDbgFile("clientDebug.txt");
 		WinsomeClient client = null;
 		int exitCode = 0;
 		try {

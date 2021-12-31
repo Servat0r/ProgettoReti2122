@@ -11,9 +11,9 @@ public final class SerializationUtilsTestMain {
 			Arrays.asList("Str1", "String2"),
 			Arrays.asList( Arrays.asList("tag1", "tag2"), Arrays.asList("tag2", "tag3", "tag54"))
 		);
-		List<String> serMap = SerializationUtils.serializeMap(tryMap);
+		List<String> serMap = Serialization.serializeMap(tryMap);
 		for (String s : serMap) Common.printLn(s);
-		ConcurrentMap<String, List<String>> tryMap2 = SerializationUtils.deserializeMap(serMap);
+		ConcurrentMap<String, List<String>> tryMap2 = Serialization.deserializeMap(serMap);
 		for (String s : tryMap2.keySet()) Common.printf("'%s' : '%s'%n", s, tryMap2.get(s).toString());
 	}
 	

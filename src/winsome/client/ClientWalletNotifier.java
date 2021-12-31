@@ -5,7 +5,7 @@ import winsome.util.Common;
 import java.io.*;
 import java.net.*;
 
-final class WalletNotifier extends Thread implements Closeable {
+final class ClientWalletNotifier extends Thread implements Closeable {
 
 	private final InetAddress mcastIP;
 	private MulticastSocket socket;
@@ -13,7 +13,7 @@ final class WalletNotifier extends Thread implements Closeable {
 	private final PrintStream err;
 	private byte[] buffer;
 	
-	public WalletNotifier(WinsomeClient client, int port, String mcastAddr, int msgLen) throws IOException {
+	public ClientWalletNotifier(WinsomeClient client, int port, String mcastAddr, int msgLen) throws IOException {
 		Common.notNull(client, mcastAddr); Common.checkAll(port >= 0, msgLen > 0);
 		this.out = client.getOut();
 		this.err = client.getErr();
@@ -30,8 +30,13 @@ final class WalletNotifier extends Thread implements Closeable {
 	public void run() {
 		boolean grouped = false;
 		String prefix = this.getClass().getSimpleName() + ": ";
+		/* 
+		 * InetSocketAddress addr = new InetSocketAddress(mcastIP, socket.getLocalPort());
+		 * NetworkInterface net = NetworkInterface.getByInetAddress(mcastIP);
+		 */
 		try {
 			this.socket.joinGroup(mcastIP);
+			/* this.socket.joinGroup(addr, net); */
 			grouped = true;
 			this.out.println(prefix + "Wallet notifying service started");
 			while (true) {
@@ -43,6 +48,7 @@ final class WalletNotifier extends Thread implements Closeable {
 			e.printStackTrace(this.err);
 			if (grouped)
 				try {this.socket.leaveGroup(mcastIP); }
+				/* this.socket.leaveGroup(addr, net); */
 				catch (IOException e1) { e1.printStackTrace(this.err); }
 				finally { this.out.println(prefix + "Wallet notifying service ended"); }
 			else {
@@ -51,6 +57,6 @@ final class WalletNotifier extends Thread implements Closeable {
 			}
 		}
 	}
-
+	
 	public void close() throws IOException { this.socket.close(); }	
 }

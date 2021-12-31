@@ -317,5 +317,5 @@ public final class Message {
 		} catch (IllegalAccessException ex) { return null; }
 		sb.append("]");
 		return sb.toString();
-	}	
+	}
 }
