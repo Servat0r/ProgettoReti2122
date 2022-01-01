@@ -149,9 +149,14 @@ public final class Common {
 		for (int n : nums) if (n < 0) throw new IllegalArgumentException();
 	}
 	
-	public static void checkAll(boolean ...conds) {
+	public static void andAllArgs(boolean ...conds) {
 		for (int i = 0; i < conds.length; i++)
 			if (!conds[i]) throw new IllegalArgumentException(Common.excStr("Condition #" + (i+1) + " NOT satisfied!"));
+	}
+	
+	public static void allAndState(boolean ...conds) {
+		for (int i = 0; i < conds.length; i++)
+			if (!conds[i]) throw new IllegalStateException();
 	}
 	
 	public static void orAll(boolean ...conds) {
@@ -168,13 +173,29 @@ public final class Common {
 		return result;
 	}
 	
-	public static int sum(Collection<Integer> coll) {
+	public static int intSum(Collection<Integer> coll) {
 		int s = 0;
-		synchronized (coll) { for (Integer i : coll) s += i; }
+		for (Integer i : coll) s += i;
 		return s;
 	}
 	
-	public static <K> int sum(ConcurrentMap<K, Integer> map){
+	public static double doubleSum(Collection<Double> coll) {
+		double s = 0.0;
+		for (Double i : coll) s += i;
+		return s;
+	}
+	
+	public static int max(Collection<Integer> coll) {
+		boolean set = false;
+		int result = 0;
+		for (int val : coll) {
+			if (!set) { result = val; set = true; }
+			else result = Math.max(val, result);
+		}
+		return result;
+	}
+	
+	public static <K> int sum(Map<K, Integer> map){
 		int s = 0;
 		synchronized (map) { for (Integer v : map.values()) s += v; }
 		return s;

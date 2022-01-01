@@ -17,8 +17,10 @@ MCASTPORT	=	44444
 # Porta del registry RMI
 REGPORT		=	7777
 
-# Timeout della socket
-TIMEOUT		=	100000
+# Timeout del socket TCP
+TCPTIMEOUT	=	100000
+
+# Timeout del socket multicast
 
 # File json del server
 SERVERJSON	=	server.json

@@ -84,11 +84,12 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 		Common.notNull(key);
 		try { lock.readLock().lock(); return this.map.containsKey(key); } finally { lock.readLock().unlock(); }
 	}
-
-	public synchronized boolean deserialize() {
+	
+	public synchronized void deserialize() throws DeserializationException {
 		if (lock == null) lock = new ReentrantReadWriteLock();
-		return true;
 	}
+	
+	public synchronized boolean isDeserialized() { return (lock != null); }
 	
 	public NavigableSet<V> get(SortedSet<T> ext) {
 		Common.notNull(ext);

@@ -23,6 +23,11 @@ public final class ConfigUtils {
 		catch (Exception ex) {throw new IllegalArgumentException(Common.excStr(str + " is not a correct long!"));}
 	};
 	
+	public static final Function<String, Double> newDouble = (str) -> {
+		try { return Double.parseDouble(str); }
+		catch (Exception ex) {throw new IllegalArgumentException(Common.excStr(str + " is not a correct long!"));}
+	};
+	
 	public static final Function<String, PrintStream> newPrintStream = (str) -> {
 		try { return new PrintStream(str); }
 		catch (Exception ex)

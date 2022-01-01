@@ -36,11 +36,14 @@ public final class Post implements Indexable<Long> {
 	
 	public synchronized static void setGen(IDGen gen) {	if (Post.gen == null) Post.gen = gen; }
 	
-	public synchronized boolean deserialize() {
+	public synchronized boolean isDeserialized() {
+		return (valLock != null && voteLock != null && commentLock != null);
+	}
+	
+	public synchronized void deserialize() throws DeserializationException {
 		if (valLock == null) valLock = new ReentrantLock();
 		if (voteLock == null) voteLock = new ReentrantReadWriteLock();
 		if (commentLock == null) commentLock = new ReentrantReadWriteLock();
-		return true;
 	}
 	
 	public Post(String title, String content, User author) {
@@ -77,7 +80,7 @@ public final class Post implements Indexable<Long> {
 	}
 
 	public void updateValue(double amount) {
-		Common.checkAll(amount >= 0.0);
+		Common.andAllArgs(amount >= 0.0);
 		try { valLock.lock(); this.value += amount; } finally { valLock.unlock(); }
 	}
 	
@@ -102,10 +105,10 @@ public final class Post implements Indexable<Long> {
 		} finally { voteLock.writeLock().unlock(); }
 	}
 	
-	public boolean addComment(String author, String content) {
+	public Integer addComment(String author, String content) {
 		Common.notNull(author, content);
-		Common.checkAll(author.length() > 0, content.length() > 0);
-		if (author.equals(this.author)) return false; //For security
+		Common.andAllArgs(author.length() > 0, content.length() > 0);
+		if (author.equals(this.author)) return null; //For security
 		SortedSet<Comment> set;
 		try {
 			commentLock.writeLock().lock();
@@ -113,7 +116,8 @@ public final class Post implements Indexable<Long> {
 				set = new TreeSet<>();
 				this.comments.put( new String(author), set );
 			} else set = this.comments.get(author);
-			return set.add(new Comment(author, this.idPost, content));
+			if (! set.add(new Comment(author, this.idPost, content)) ) return null;
+			else return Integer.valueOf(set.size());
 		} finally { commentLock.writeLock().unlock(); }
 	}
 	

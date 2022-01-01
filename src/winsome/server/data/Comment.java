@@ -18,7 +18,7 @@ public final class Comment implements Comparable<Comment> {
 	
 	public Comment(String idAuthor, long idPost, String content) {
 		Common.notNull(idAuthor, content);
-		Common.checkAll(idPost > 0, content.length() > 0);
+		Common.andAllArgs(idPost > 0, content.length() > 0);
 		this.idAuthor = idAuthor;
 		this.idPost = idPost;
 		this.content = content;

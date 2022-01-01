@@ -82,7 +82,7 @@ public final class Message {
 	);
 		
 	private static byte[] readNBytes(InputStream in, int length) throws IOException {
-		Common.checkAll(in != null, length >= 0);
+		Common.andAllArgs(in != null, length >= 0);
 		List<Byte> total = new ArrayList<>();
 		int bread = 0, res;
 		while (bread < length) {
@@ -116,7 +116,7 @@ public final class Message {
 	public static final byte[] getCode(String id) throws MessageException { return getCode(id, null); }
 	
 	public static final String[] getIdParam(byte idCode, byte paramCode) throws MessageException {
-		Common.checkAll(idCode >= 0, idCode < (byte)COMMANDS.size(), paramCode >= -1);
+		Common.andAllArgs(idCode >= 0, idCode < (byte)COMMANDS.size(), paramCode >= -1);
 		String id = new String(COMMANDS.get((int)idCode));
 		String param = new String(EMPTY);
 		List<String> l = CODES.get(id);
@@ -203,12 +203,12 @@ public final class Message {
 	}
 
 	public final String getIdStr() {
-		Common.checkAll(idCode >= 0, idCode < (byte)COMMANDS.size());
+		Common.andAllArgs(idCode >= 0, idCode < (byte)COMMANDS.size());
 		return new String(COMMANDS.get((int)idCode));
 	}
 	
 	public final String getParamStr() throws MessageException {
-		Common.checkAll(paramCode >= -1);
+		Common.andAllArgs(paramCode >= -1);
 		String id = this.getIdStr();
 		String param = new String(EMPTY);
 		List<String> l = CODES.get(id);

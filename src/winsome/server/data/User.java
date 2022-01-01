@@ -11,7 +11,7 @@ import com.google.gson.reflect.TypeToken;
 import winsome.util.*;
 
 public final class User implements Indexable<String> {
-
+	
 	private static final int NUM_RCHARS = 8;
 	private static final int RCHAR_MIN = Math.min('A', 'a');
 	private static final int RCHAR_MAX = Math.max('Z', 'z');
@@ -19,8 +19,9 @@ public final class User implements Indexable<String> {
 	public static final Type TYPE = new TypeToken<User>() {}.getType();
 	
 	//TODO Immutable fields (no sync)
+	private transient boolean deserialized = false;
 	private final String username;
-	private Wallet wallet;
+	private transient Wallet wallet;
 	private final String pwAppend; //String concat'd with password for generating hashStr
 	private final String hashStr;
 	private final List<String> tags;
@@ -82,12 +83,15 @@ public final class User implements Indexable<String> {
 		return 0;
 	}
 
-	public User(String username, String password, Table<Long, Post> posts, String ...tags) throws NoSuchAlgorithmException {
-		Common.notNull(username, password, posts, tags);
-		Common.checkAll(username.length() > 0, password.length() > 0, tags.length >= 1, tags.length <= 5);
+	public User(String username, String password, Table<Long, Post> posts, Table<String, Wallet> wallets, List<String> tags)
+			throws NoSuchAlgorithmException {
+		Common.notNull(username, password, posts, wallets, tags);
+		Common.andAllArgs(username.length() > 0, password.length() > 0, tags.size() >= 1, tags.size() <= 5);
+		this.deserialized = true;
 		this.username = username;
-		this.wallet = new Wallet();
-		this.tags = Arrays.asList(tags);
+		this.wallet = new Wallet(username);
+		if (wallets.putIfAbsent(wallet) != null) throw new IllegalStateException();
+		this.tags = tags;
 		this.followers = new Index<>();
 		this.following = new Index<>();
 		this.blog = new Index<>();
@@ -99,12 +103,21 @@ public final class User implements Indexable<String> {
 		this.hashStr = Hash.bytesToHex(Hash.sha256(password + pwAppend));
 	}
 		
-	public synchronized boolean deserialize(Table<String, User> users, Table<Long, Post> posts) {
-		Common.notNull(users, posts);
-		if (!following.deserialize(users) || !followers.deserialize(users)) return false;
-		if (posts == null) { this.posts = posts; if (!blog.deserialize(posts)) return false; }
-		return true;
+	public synchronized void deserialize(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
+		throws DeserializationException {
+		Common.notNull(users, posts, wallets);
+		if (this.isDeserialized()) return;
+		if (!users.isDeserialized() || !posts.isDeserialized() || !wallets.isDeserialized())
+			throw new DeserializationException();		
+		following.deserialize(users); followers.deserialize(users);
+		if (this.posts == null) this.posts = posts; else this.posts.deserialize();
+		blog.deserialize(this.posts);
+		if (this.wallet == null) this.wallet = wallets.get(username);
+		this.wallet.deserialize();
+		deserialized = true;
 	}
+	
+	public synchronized boolean isDeserialized() { return deserialized; }
 	
 	public boolean checkPassword(String password) throws NoSuchAlgorithmException {
 		Common.notNull(password);
@@ -149,14 +162,14 @@ public final class User implements Indexable<String> {
 	}
 	
 	public List<String> getPost(long idPost) { //show post <idPost>
-		Common.checkAll(idPost > 0);
+		Common.andAllArgs(idPost > 0);
 		Post p = this.blog.get(idPost);
 		if (p == null) p = this.posts.get(idPost);
 		return (p != null ? p.getPostData() : null);
 	}
 	
-	public boolean addComment(long idPost, String content) throws IllegalAccessException { //comment <idPost> <comment>
-		Common.checkAll(idPost > 0, content != null);
+	public Integer addComment(long idPost, String content) throws IllegalAccessException { //comment <idPost> <comment>
+		Common.andAllArgs(idPost > 0, content != null);
 		Post p;
 		if ( (p = this.feedSearch(idPost)) != null ) return p.addComment(key(), content);
 		else throw new IllegalAccessException();
@@ -173,7 +186,7 @@ public final class User implements Indexable<String> {
 	}
 	
 	public void deletePost(long idPost) throws TableException, IllegalAccessException { //delete <idPost>
-		Common.checkAll(idPost > 0);
+		Common.andAllArgs(idPost > 0);
 		Post p;
 		if ( ((p = this.blog.get(idPost)) != null) && p.getAuthor().equals(key()) ) {
 			if (this.posts.remove(idPost) == null) throw new TableException();
@@ -182,14 +195,14 @@ public final class User implements Indexable<String> {
 	}
 	
 	public boolean ratePost(long idPost, boolean like) throws IllegalAccessException { //rate <idPost> <vote>
-		Common.checkAll(idPost > 0);
+		Common.andAllArgs(idPost > 0);
 		Post p;
 		if ( (p = this.feedSearch(idPost)) == null) throw new IllegalAccessException();
 		return p.addRate(key(), like);
 	}
 	
 	public boolean rewinPost(long idPost) throws IllegalAccessException { //rewin <idPost>
-		Common.checkAll(idPost > 0);
+		Common.andAllArgs(idPost > 0);
 		Post p = null;
 		if ((p = this.feedSearch(idPost)) == null) throw new IllegalAccessException();
 		return this.blog.add(p);

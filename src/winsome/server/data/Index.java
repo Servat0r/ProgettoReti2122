@@ -18,14 +18,16 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		this.lock = new ReentrantReadWriteLock();
 	}
 
-	public synchronized boolean deserialize(Table<T, V> src) {
+	public synchronized boolean isDeserialized() { return (map != null && lock != null); }
+	
+	public synchronized void deserialize(Table<T, V> src) throws DeserializationException {
 		Common.notNull(src);
+		if (!src.isDeserialized()) throw new DeserializationException();
 		if (this.map == null) {
 			NavigableSet<V> vals = src.get(keys);
 			for (V val : vals) this.map.put(val.key(), val);
 		}
 		if (lock == null) lock = new ReentrantReadWriteLock();
-		return true;
 	}
 	
 	public V get(T key) {

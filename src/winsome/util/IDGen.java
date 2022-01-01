@@ -1,4 +1,4 @@
-package winsome.server.data;
+package winsome.util;
 
 public final class IDGen {
 	

@@ -1,40 +1,40 @@
 package winsome.server.data;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.locks.*;
 
+import com.google.gson.reflect.TypeToken;
+
 import winsome.util.Common;
 
-public final class Wallet {
-
-	private static IDGen gen = null;
-		
+public final class Wallet implements Indexable<String> {
+	
 	private static final String TRANSMARK = "#", SEPAR = " : ";	
 	
-	private final long id; //TODO Immutable
+	public static final Type TYPE = new TypeToken<Wallet>() {}.getType();
+	
+	private final String owner; //TODO Immutable
 	private double value; //TODO Mutable(s)
 	private final NavigableMap<Long, Double> history;
 	private transient ReentrantReadWriteLock lock;
-	
-	public synchronized static void setGen(IDGen gen) {	if (Wallet.gen == null) Wallet.gen = gen; }
-	
-	public synchronized boolean deserialize() {
+		
+	public synchronized void deserialize() throws DeserializationException {
 		if (lock == null) lock = new ReentrantReadWriteLock();
-		return true;
 	}
 	
-	public Wallet() {
-		Common.notNull(Wallet.gen);
-		this.id = Wallet.gen.nextId();
+	public synchronized boolean isDeserialized() { return (lock != null); }
+	
+	public Wallet(String owner) {
+		Common.notNull(owner);
+		this.owner = new String(owner);
 		this.value = 0.0;
 		this.history = new TreeMap<>();
 		this.lock = new ReentrantReadWriteLock();
 	}
-
-	public Long key() { return id; }
-
+	
+	public String key() { return owner; }
+	
 	public List<String> history(){
 		List<String> result = new ArrayList<>();
 		try {
@@ -55,7 +55,7 @@ public final class Wallet {
 	}
 	
 	public boolean newTransaction(long time, double value) {
-		Common.checkAll(time > 0, value >= 0.0);
+		Common.andAllArgs(time > 0, value >= 0.0);
 		try {
 			lock.writeLock().lock();
 			boolean result = (this.history.putIfAbsent(time, value) == null);
