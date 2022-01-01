@@ -62,10 +62,5 @@ final class BitcoinService {
 			double value = Double.parseDouble(strvalue);
 			return this.convert(value);
 		} catch (NumberFormatException ex) { return null; }
-	}
-	
-	public static void main(String[] args) throws MalformedURLException {
-		BitcoinService serv = new BitcoinService(2, null);
-		System.out.printf("result = '%.4f'%n", serv.convert(0.98));
-	}
+	}	
 }
