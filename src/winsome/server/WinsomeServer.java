@@ -23,11 +23,7 @@ import winsome.server.data.*;
 import winsome.util.*;
 
 public final class WinsomeServer implements AutoCloseable {
-	
-	/* URL per la conversione in bitcoin (prevedere un task per questo) */
-	private static final String BTC_CONV_URL = 
-			"https://www.random.org/integers/?num=1&min=1&max=100&col=1&base=10&format=plain&rnd=new";
-	
+		
 	private static final Type
 		USERSTYPE = new TypeToken< Table<String, User> >() {}.getType(),
 		POSTSTYPE = new TypeToken< Table<String, User> >(){}.getType();
@@ -46,6 +42,8 @@ public final class WinsomeServer implements AutoCloseable {
 		DFLUSERJSON = "users.json",
 		DFLPOSTJSON = "posts.json",
 		DFLWALLETJSON = "wallets.json";
+	
+	public static final String REWMANAGERNAME = "RewardManager";
 	
 	/* I/O */
 	private transient InputStream in = System.in;
@@ -83,6 +81,9 @@ public final class WinsomeServer implements AutoCloseable {
 	private TimeUnit rewUnit;
 	private transient RewardManager rewManager;
 	
+	/* Conversione in bitcoin */
+	private BitcoinService bitcoinService;
+	
 	/* "Database" (verrà serializzato a parte) */
 	private transient Table<String, User> users;
 	private transient Table<Long, Post> posts;
@@ -95,16 +96,16 @@ public final class WinsomeServer implements AutoCloseable {
 	
 	private IDGen postGen;
 	
-	private void init(String serverJson, String userJson, String postJson, Table<String, User> users,
+	private void transientsInit(String serverJson, String userJson, String postJson, Table<String, User> users,
 		Table<Long, Post> posts, Table<String, Wallet> wallets)
 			throws IOException, AlreadyBoundException, DeserializationException {		
 		this.serverJson = serverJson;
 		this.userJson = userJson;
 		this.postJson = postJson;
-		this.init(users, posts, wallets);
+		this.transientsInit(users, posts, wallets);
 	}
 
-	private void init(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
+	private void transientsInit(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
 			throws IOException, AlreadyBoundException, DeserializationException {
 		this.users = ( users != null ? users : new Table<>() );
 		this.posts = (posts != null ? posts : new Table<>() );
@@ -141,6 +142,7 @@ public final class WinsomeServer implements AutoCloseable {
 			this.rwAuthPerc,
 			this.rwCurPerc
 		);
+		this.rewManager.setName(REWMANAGERNAME);
 		this.svHandler = new ServerInterfaceImpl(this);
 		this.rmiReg = LocateRegistry.createRegistry(regPort);
 		this.rmiReg.bind(ServerInterface.REGSERVNAME, this.svHandler);		
@@ -193,7 +195,9 @@ public final class WinsomeServer implements AutoCloseable {
 			postGen = new IDGen();
 			Post.setGen(postGen);
 			
-			this.init(users, posts, wallets);			
+			bitcoinService = new BitcoinService();
+			
+			this.transientsInit(users, posts, wallets);			
 		}
 	}
 	
@@ -229,7 +233,7 @@ public final class WinsomeServer implements AutoCloseable {
 			catch (JsonIOException | JsonSyntaxException ex) { Common.debugln(ex); server = null; }
 			finally { serverReader.close(); }
 		}
-		if (server != null) server.init(serverJson, userJson, postJson, users, posts, wallets);
+		if (server != null) server.transientsInit(serverJson, userJson, postJson, users, posts, wallets);
 		else server = new WinsomeServer(configMap, users, posts, wallets);
 		return server;
 	}

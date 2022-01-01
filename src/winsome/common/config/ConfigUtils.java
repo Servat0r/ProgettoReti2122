@@ -25,7 +25,7 @@ public final class ConfigUtils {
 	
 	public static final Function<String, Double> newDouble = (str) -> {
 		try { return Double.parseDouble(str); }
-		catch (Exception ex) {throw new IllegalArgumentException(Common.excStr(str + " is not a correct long!"));}
+		catch (Exception ex) {throw new IllegalArgumentException(Common.excStr(str + " is not a correct double!"));}
 	};
 	
 	public static final Function<String, PrintStream> newPrintStream = (str) -> {

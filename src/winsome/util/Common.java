@@ -122,8 +122,9 @@ public final class Common {
 	/* DEBUGGING */
 	
 	/* EXCEPTIONS MESSAGES FORMATTING */
-	public static String excStr(String msg) {
+	public static String excStr(String format, Object ...objs) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
+		String msg = String.format(format, objs);
 		return (fname + DBGSEPAR + msg);
 	}
 	
@@ -136,7 +137,7 @@ public final class Common {
 	/* PARAMS CHECKING */
 	public static void notNull(String msg, Object ...objs) {
 		for (int i = 0; i < objs.length; i++) if (objs[i] == null)
-			throw new NullPointerException( excStr("arg #" + (i+1) + DBGSEPAR + msg) );
+			throw new NullPointerException( excStr("arg #%d%s%s", i+1, DBGSEPAR, msg) );
 	}
 	
 	public static void notNull(Object ...objs) { notNull("is null!", objs); }

@@ -3,6 +3,8 @@ package winsome.server;
 import java.util.*;
 import java.util.concurrent.*;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.*;
 
 import winsome.server.data.*;
@@ -20,7 +22,7 @@ final class RewardManager extends Thread {
 	private int mcastPort;
 	private MulticastSocket socket;
 	private InetAddress address;
-	private Table<String, Wallet> wallets;
+	private transient Table<String, Wallet> wallets;
 	private ActionRegistry registry;
 	private RewardCalculator calculator;
 	private State state;
@@ -90,4 +92,22 @@ final class RewardManager extends Thread {
 	public synchronized Integer getExitCode() { return exitCode; }
 	
 	public synchronized void setExitCode(Integer code) { exitCode = code; }
+	
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append(this.getClass().getSimpleName() + " [");
+		try {
+			boolean first = false;
+			Field[] fields = this.getClass().getDeclaredFields();
+			for (int i = 0; i < fields.length; i++) {
+				Field f = fields[i];
+				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
+					sb.append( (first ? ", " : "") + "\n" + f.getName() + " = " + f.get(this) );
+					first = true;
+				}
+			}
+		} catch (IllegalAccessException ex) { }
+		sb.append("\n]");
+		return sb.toString();		
+	}
 }

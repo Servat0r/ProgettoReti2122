@@ -14,8 +14,8 @@ public final class Wallet implements Indexable<String> {
 	
 	public static final Type TYPE = new TypeToken<Wallet>() {}.getType();
 	
-	private final String owner; //TODO Immutable
-	private double value; //TODO Mutable(s)
+	private final String owner;
+	private double value;
 	private final NavigableMap<Long, Double> history;
 	private transient ReentrantReadWriteLock lock;
 		

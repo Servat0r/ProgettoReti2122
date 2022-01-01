@@ -33,8 +33,8 @@ public final class WinsomeClient implements AutoCloseable {
 		ILL_RESPONSE = "Illegal message received by server.",
 		NONE_LOGGED = "no user logged in",
 		ALREADY_LOGGED = "there is still a user logged in",
-		INV_PARAM = "Invalid parameter: '",
-		INV_CMD = "Invalid command: '",
+		INV_PARAM = "Invalid parameter: '%s'",
+		INV_CMD = "Invalid command: '%s'",
 		ILLARG = "Illegal argument passed";
 	
 	private CommandParser parser = null;
@@ -232,7 +232,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (param.equals(Message.USERS)) result = this.listUsers();
 				else if (param.equals(Message.FOLLOWERS)) result = this.listFollowers();
 				else if (param.equals(Message.FOLLOWING)) result = this.listFollowing();
-				else return this.printError(Common.excStr(INV_PARAM + param + "'"));
+				else return this.printError(Common.excStr(INV_PARAM, param));
 			}
 			
 			else if ( id.equals(Message.FOLLOW) ) result = this.followUser(args.get(0));
@@ -246,7 +246,7 @@ public final class WinsomeClient implements AutoCloseable {
 			else if ( id.equals(Message.SHOW) ) {
 				if (param.equals(Message.FEED)) result = this.showFeed();
 				else if (param.equals(Message.POST)) result = this.showPost(Long.parseLong(args.get(0)));
-				else return this.printError(Common.excStr(INV_PARAM + param + "'"));
+				else return this.printError(Common.excStr(INV_PARAM, param));
 			}
 			
 			else if ( id.equals(Message.DELETE) ) result = this.deletePost(Long.parseLong(args.get(0)));
@@ -260,15 +260,15 @@ public final class WinsomeClient implements AutoCloseable {
 			else if ( id.equals(Message.WALLET) ) {
 				if ( param == null || param.equals(Message.EMPTY) ) result = this.getWallet();
 				else if (param.equals(Message.BTC)) result = this.getWalletInBitcoin();
-				else return this.printError(Common.excStr(INV_PARAM + param + "'"));
+				else return this.printError(Common.excStr(INV_PARAM, param));
 			}
 			
 			else if ( id.equals(Message.HELP) ) {
 				if (param == null || param.equals(Message.EMPTY) ) result = this.help();
 				else if (param.equals(Message.CMD)) result = this.help(args.get(0));
-				else return this.printError(Common.excStr(INV_PARAM + param + "'"));
+				else return this.printError(Common.excStr(INV_PARAM, param));
 			}
-			else return this.printError(Common.excStr(INV_CMD + id + "'"));
+			else return this.printError(Common.excStr(INV_CMD, id));
 			
 			return result;
 		} catch (IllegalArgumentException ex) { return this.printError(Common.excStr(ILLARG)); }
