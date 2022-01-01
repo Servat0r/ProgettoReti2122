@@ -9,12 +9,11 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 
 	private final InetAddress mcastIP;
 	private MulticastSocket socket;
-	private final PrintStream out;
-	private final PrintStream err;
+	private final PrintStream out, err;
 	private byte[] buffer;
 	
 	public ClientWalletNotifier(WinsomeClient client, int port, String mcastAddr, int msgLen) throws IOException {
-		Common.notNull(client, mcastAddr); Common.checkAll(port >= 0, msgLen > 0);
+		Common.notNull(client, mcastAddr); Common.andAllArgs(port >= 0, msgLen > 0);
 		this.out = client.getOut();
 		this.err = client.getErr();
 		this.mcastIP = InetAddress.getByName(mcastAddr);

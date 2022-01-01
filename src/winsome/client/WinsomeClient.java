@@ -108,7 +108,7 @@ public final class WinsomeClient implements AutoCloseable {
 		StringBuilder sb = new StringBuilder();
 		int maxIdLen = ID.length(), maxAuthorLen = AUTHOR.length(), maxTitleLen = TITLE.length(), cid, cad, ctd;
 		for (List<String> post : posts) {
-			Common.checkAll(post != null, post.size() == 3);
+			Common.andAllArgs(post != null, post.size() == 3);
 			maxIdLen = Math.max(maxIdLen, post.get(0).length());
 			maxAuthorLen = Math.max(maxAuthorLen, post.get(1).length());
 			maxTitleLen = Math.max(maxTitleLen, post.get(2).length());
@@ -135,7 +135,7 @@ public final class WinsomeClient implements AutoCloseable {
 	}
 	
 	private String formatPost(List<String> data) {
-		Common.checkAll(data != null, data.size() >= 4);
+		Common.andAllArgs(data != null, data.size() >= 4);
 		StringBuilder sb = new StringBuilder();
 		String title = data.get(0), content = data.get(1), likes = data.get(2), dislikes = data.get(3);
 		title = title.substring(1, title.length()-1);
@@ -587,7 +587,7 @@ public final class WinsomeClient implements AutoCloseable {
 	}
 	
 	public boolean showPost(long idPost) throws IOException {
-		Common.checkAll(idPost >= 0);
+		Common.andAllArgs(idPost >= 0);
 		try {
 			Message msg = new Message( Message.SHOW, Message.POST, Arrays.asList(Long.toString(idPost)) );
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
@@ -608,22 +608,22 @@ public final class WinsomeClient implements AutoCloseable {
 	}
 	
 	public boolean deletePost(long idPost) throws IOException {
-		Common.checkAll(idPost >= 0);
+		Common.andAllArgs(idPost >= 0);
 		return this.simpleRequest(Message.DELETE, null, Arrays.asList(Long.toString(idPost)));
 	}
 	
 	public boolean rewinPost(long idPost) throws IOException {
-		Common.checkAll(idPost >= 0);
+		Common.andAllArgs(idPost >= 0);
 		return this.simpleRequest(Message.REWIN, null, Arrays.asList(Long.toString(idPost)));
 	}
 	
 	public boolean ratePost(long idPost, String vote) throws IOException {
-		Common.checkAll(idPost >= 0, vote != null);
+		Common.andAllArgs(idPost >= 0, vote != null);
 		return this.simpleRequest( Message.RATE, null, Arrays.asList(Long.toString(idPost), vote) );
 	}
 	
 	public boolean addComment(long idPost, String comment) throws IOException {
-		Common.checkAll(idPost >= 0, comment != null);
+		Common.andAllArgs(idPost >= 0, comment != null);
 		comment = comment.substring(1, comment.length()-1);
 		return this.simpleRequest(Message.COMMENT, null, Arrays.asList(Long.toString(idPost), comment) );
 	}
