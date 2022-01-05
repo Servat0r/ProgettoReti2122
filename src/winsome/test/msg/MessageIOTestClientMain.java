@@ -21,7 +21,7 @@ public final class MessageIOTestClientMain {
 			InputStream in = socket.getInputStream();
 			OutputStream out = socket.getOutputStream();
 			while (parser.hasNextCmd()) {
-				msg = new Message(parser.nextCmd());
+				msg = Message.newMessageFromCmd(parser.nextCmd());
 				System.out.println(msg);
 				if (!msg.sendToStream(out)) break;
 				System.out.println("#client_main: message sent");

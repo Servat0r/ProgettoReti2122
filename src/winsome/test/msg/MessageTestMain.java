@@ -14,7 +14,7 @@ public final class MessageTestMain {
 			while (parser.hasNextCmd()) {
 				cmd = parser.nextCmd();
 				System.out.println( (cmd != null ? cmd.toString() : "match not found") );
-				m = new Message(cmd);
+				m = Message.newMessageFromCmd(cmd);
 				System.out.println(m.toString());
 			}
 		} catch (Exception ex) {

@@ -29,6 +29,12 @@ public final class CommandDef {
 		this.args = args;
 	}
 	
+	public static final boolean matchWSpaceComment(String cmdline) {
+		String cmdstrip = cmdline.strip();
+		if (cmdstrip.length() == 0 || cmdstrip.startsWith("#")) return true;
+		else return false;
+	}
+	
 	public static final String matchId(String cmdline) {
 		String cmdstrip = cmdline.strip();
 		Matcher m = Pattern.compile(ID_PARAM_REGEX).matcher(cmdstrip);

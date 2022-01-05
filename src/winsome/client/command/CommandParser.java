@@ -4,7 +4,7 @@ import java.io.*;
 import java.util.*;
 import java.util.function.*;
 
-import winsome.util.Common;
+import winsome.util.*;
 
 
 public final class CommandParser implements AutoCloseable {
@@ -16,12 +16,15 @@ public final class CommandParser implements AutoCloseable {
 			catch (Exception ex) { return false; }
 		}
 	};
+	
+	public static final String WHOAMI = "whoami";
 		
-	public static final String ALPHANUM = "[a-zA-Z0-9_]+";
-	public static final String LOWERNUM = "[a-z0-9_]+";
-	public static final String NUM = "[0-9]+";
-	public static final String QUOTED = "[\"][^\"]+[\"]"; /* Empty titles and contents NOT allowed! */
-	public static final String RATE = "(\\+|\\-)1";
+	public static final String
+		ALPHANUM = "[a-zA-Z0-9_]+",
+		LOWERNUM = "[a-z0-9_]+",
+		NUM = "[0-9]+",
+		QUOTED = "[\"][^\"]+[\"]", /* Empty titles and contents NOT allowed! */
+		RATE = "(\\+|\\-)1";
 	
 	private final Set<CommandDef> cdefs;
 	private final Scanner input;
@@ -73,7 +76,7 @@ public final class CommandParser implements AutoCloseable {
 		HashMap<String, CommandArgs> helpMap = new HashMap<>();
 		helpMap.put(null, null); 
 		helpMap.put("cmd", new CommandArgs(new String[] {CommandDef.ID_PARAM_REGEX}) );
-		
+				
 		this.cdefs = new HashSet<>();
 		
 		this.cdefs.add(new CommandDef("register", registerMap));
@@ -97,7 +100,9 @@ public final class CommandParser implements AutoCloseable {
 		this.cdefs.add(new CommandDef("help", helpMap));
 		
 		this.cdefs.add(new CommandDef("quit", idOnlyMap));
-		this.cdefs.add(new CommandDef("exit", idOnlyMap));		
+		this.cdefs.add(new CommandDef("exit", idOnlyMap));
+		
+		this.cdefs.add(new CommandDef(WHOAMI, idOnlyMap));
 	}
 	
 	public CommandParser() { this(System.in); }
@@ -105,6 +110,7 @@ public final class CommandParser implements AutoCloseable {
 	public Command nextCmd() {
 		Command cmd = null;
 		String nextLine = this.input.nextLine();
+		if (CommandDef.matchWSpaceComment(nextLine)) return Command.NULL;
 		String idAttempt = CommandDef.matchId(nextLine);
 		if (idAttempt != null) {
 			for (CommandDef def : this.cdefs) {

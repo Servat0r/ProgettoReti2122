@@ -6,7 +6,9 @@ import java.util.concurrent.locks.*;
 
 import com.google.gson.reflect.TypeToken;
 
+import winsome.annotations.NotNull;
 import winsome.util.Common;
+import winsome.util.Serialization;
 
 public final class Wallet implements Indexable<String> {
 	
@@ -14,9 +16,9 @@ public final class Wallet implements Indexable<String> {
 	
 	public static final Type TYPE = new TypeToken<Wallet>() {}.getType();
 	
-	private final String owner;
+	private String owner;
 	private double value;
-	private final NavigableMap<Long, Double> history;
+	private NavigableMap<Long, Double> history;
 	private transient ReentrantReadWriteLock lock;
 		
 	public synchronized void deserialize() throws DeserializationException {
@@ -35,6 +37,7 @@ public final class Wallet implements Indexable<String> {
 	
 	public String key() { return owner; }
 	
+	@NotNull
 	public List<String> history(){
 		List<String> result = new ArrayList<>();
 		try {
@@ -70,23 +73,13 @@ public final class Wallet implements Indexable<String> {
 		try { lock.readLock().lock(); return value; } finally { lock.readLock().unlock(); }
 	}
 	
+	@NotNull
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
 		sb.append(this.getClass().getSimpleName() + " [");
 		try {
-			lock.readLock().lock();
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + f.getName() + " = " + f.get(this) );
-					if (!first) first = true;
-				}
-			}
-			sb.append("]");
-			return sb.toString();		
-		} catch (IllegalAccessException ex) { return null; }
-		finally { lock.readLock().unlock(); }
+			if (lock != null) lock.readLock().lock();
+			return String.format("%s : %s", this.getClass().getSimpleName(), Serialization.GSON.toJson(this));
+		} finally { if (lock != null) lock.readLock().unlock(); }
 	}
 }

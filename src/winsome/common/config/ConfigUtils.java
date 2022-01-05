@@ -44,11 +44,11 @@ public final class ConfigUtils {
 			{throw new IllegalArgumentException(Common.excStr(str + " is not a correct file for output stream!")); } 
 	};
 	
-	public static final <T> T setValue(Map<String, String> configMap, String keyName, Function<String, T> fun, T defVal) {
+	public static final <T> T setValueOrDefault(Map<String, String> configMap, String keyName, Function<String, T> fun, T defVal) {
 		String cval = configMap.get(keyName); return (cval != null ? fun.apply(cval) : defVal);
 	}
 
 	public static final <T> T setValue(Map<String, String> configMap, String keyName, Function<String, T> fun) {
-		return setValue(configMap, keyName, fun, null);
+		return setValueOrDefault(configMap, keyName, fun, null);
 	}
 }

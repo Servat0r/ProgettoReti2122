@@ -3,6 +3,7 @@ bin/
 .classpath
 .project
 note.txt
-debug.txt
+*.dbg
 src/other/
 src/winsome/other/
+*.json

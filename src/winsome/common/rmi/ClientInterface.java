@@ -3,10 +3,10 @@ package winsome.common.rmi;
 import java.util.*;
 import java.rmi.*;
 
-public interface ClientInterface {
+public interface ClientInterface extends Remote {
 	
-	public boolean addFollower(String username, List<String> tags) throws RemoteException;
+	public void addFollower(String username, List<String> tags) throws RemoteException;
 	
-	public boolean removeFollower(String username) throws RemoteException;
+	public void removeFollower(String username) throws RemoteException;
 	
 }

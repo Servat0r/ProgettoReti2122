@@ -1,5 +1,6 @@
 package winsome.server.data;
 
+import winsome.annotations.NotNull;
 import winsome.util.Common;
 
 import java.lang.reflect.Field;
@@ -11,10 +12,10 @@ public final class Comment implements Comparable<Comment> {
 
 	public static final Type TYPE = new TypeToken<Comment>() {}.getType();
 	
-	private final String idAuthor;
-	private final long idPost;
-	private final String content;
-	private final long time;
+	@NotNull
+	private final String idAuthor, content;
+	@NotNull
+	private final long idPost, time;
 	
 	public Comment(String idAuthor, long idPost, String content) {
 		Common.notNull(idAuthor, content);
@@ -45,18 +46,18 @@ public final class Comment implements Comparable<Comment> {
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
 		sb.append( this.getClass().getSimpleName() + " [");
-		try {
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + f.getName() + " = " + f.get(this) );
-					if (!first) first = true;
-				}
+		Field[] fields = this.getClass().getDeclaredFields();
+		boolean first = false;
+		Object currObj;
+		for (int i = 0; i < fields.length; i++) {
+			Field f = fields[i];
+			if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
+				try { currObj = f.get(this); } catch (IllegalAccessException ex) { continue; }
+				sb.append( (first ? ", " : "") + f.getName() + " = " + currObj );
+				if (!first) first = true;
 			}
-			sb.append("]");
-			return sb.toString();
-		} catch (IllegalAccessException ex) { return null; }
+		}
+		sb.append("]");
+		return sb.toString();
 	}
 }

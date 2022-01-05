@@ -2,18 +2,27 @@ package winsome.server.data;
 
 import java.util.*;
 import java.util.concurrent.locks.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import com.google.gson.reflect.TypeToken;
 
+import winsome.annotations.NotNull;
 import winsome.util.*;
 
-public final class Post implements Indexable<Long> {
+public final class Post implements Indexable<Long>, Comparable<Post> {
 		
 	private static IDGen gen = null;
 		
 	public static final Type TYPE = new TypeToken<Post>() {}.getType();
+	
+	public static final String
+		LIKE = "+1",
+		DISLIKE = "-1";
+	
+	public static boolean getVote(String vote) throws DataException {
+		if (vote.equals(LIKE)) return true;
+		else if (vote.equals(DISLIKE)) return false;
+		else throw new DataException(DataException.INV_VOTE);
+	}
 	
 	//TODO These fields are immutable and can be accessed without synchronization
 	private final long idPost;
@@ -47,7 +56,7 @@ public final class Post implements Indexable<Long> {
 	}
 	
 	public Post(String title, String content, User author) {
-		Common.notNull(title, content, author, Post.gen);
+		Common.notNull(title, content, author);//, Post.gen);
 		this.idPost = Post.gen.nextId();
 		this.title = Common.dequote(title);
 		this.content = Common.dequote(content);
@@ -65,6 +74,7 @@ public final class Post implements Indexable<Long> {
 	public Long key() { return this.idPost; }
 
 	//TODO This method does NOT need synchronization (only immutable fields)
+	@NotNull
 	public String getPostInfo() {
 		StringBuilder sb = new StringBuilder();
 		String separ = Serialization.SEPAR;
@@ -84,6 +94,7 @@ public final class Post implements Indexable<Long> {
 		try { valLock.lock(); this.value += amount; } finally { valLock.unlock(); }
 	}
 	
+	@NotNull
 	private List<String> formatComments(Map.Entry<String, SortedSet<Comment>> entry){
 		List<String> result = new ArrayList<>();
 		Iterator<Comment> iter = entry.getValue().iterator();
@@ -105,10 +116,17 @@ public final class Post implements Indexable<Long> {
 		} finally { voteLock.writeLock().unlock(); }
 	}
 	
-	public Integer addComment(String author, String content) {
+	/**
+	 * 
+	 * @param author
+	 * @param content
+	 * @return 
+	 * @throws DataException 
+	 */
+	public int addComment(String author, String content) throws DataException {
 		Common.notNull(author, content);
 		Common.andAllArgs(author.length() > 0, content.length() > 0);
-		if (author.equals(this.author)) return null; //For security
+		if (author.equals(this.author)) throw new DataException(DataException.SAME_AUTHOR);
 		SortedSet<Comment> set;
 		try {
 			commentLock.writeLock().lock();
@@ -116,12 +134,13 @@ public final class Post implements Indexable<Long> {
 				set = new TreeSet<>();
 				this.comments.put( new String(author), set );
 			} else set = this.comments.get(author);
-			if (! set.add(new Comment(author, this.idPost, content)) ) return null;
-			else return Integer.valueOf(set.size());
+			if (! set.add(new Comment(author, this.idPost, content)) ) throw new DataException(DataException.UNADD_COMMENT);
+			else return set.size();
 		} finally { commentLock.writeLock().unlock(); }
 	}
 	
-	public List<String> getPostData(){
+	@NotNull
+	public List<String> getPostData() {
 		int[] votes = new int[2];
 		
 		try {
@@ -131,36 +150,35 @@ public final class Post implements Indexable<Long> {
 		} finally { voteLock.readLock().unlock(); }
 		
 		List<String> result = 
-				Arrays.asList(title, content, Integer.toString(votes[0]), Integer.toString(votes[1]));
+				Common.toList(title, content, Integer.toString(votes[0]), Integer.toString(votes[1]));
 		
 		try {
 			commentLock.readLock().lock();
-			for (Map.Entry<String, SortedSet<Comment>> entry : comments.entrySet())
-				{ result.addAll(this.formatComments(entry)); }
+			for (Map.Entry<String, SortedSet<Comment>> entry : comments.entrySet()) {
+				result.addAll(this.formatComments(entry));
+			}
 		} finally { commentLock.readLock().unlock(); }
 		
 		return result;
 	}
 	
+	@NotNull
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
 		try {
-			valLock.lock();
-			voteLock.readLock().lock();
-			commentLock.readLock().lock();
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + f.getName() + " = " + f.get(this) );
-					if (!first) first = true;
-				}
+			if (valLock != null && voteLock != null && commentLock != null) {
+				valLock.lock();
+				voteLock.readLock().lock();
+				commentLock.readLock().lock();
 			}
-			sb.append("]");
-			return sb.toString();		
-		} catch (IllegalAccessException ex) { return null; }
-		finally { valLock.unlock(); voteLock.readLock().unlock(); commentLock.readLock().unlock(); }
+			return String.format("%s : %s", this.getClass().getSimpleName(), Serialization.GSON.toJson(this));
+		} finally {
+			if (valLock != null && voteLock != null && commentLock != null)
+				{ valLock.unlock(); voteLock.readLock().unlock(); commentLock.readLock().unlock(); }
+		}
+	}
+
+	public int compareTo(Post other) {
+		if (this.idPost == other.idPost) return 0;
+		else return (this.idPost > other.idPost ? 1 : -1);
 	}
 }

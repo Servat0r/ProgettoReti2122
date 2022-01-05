@@ -1,14 +1,15 @@
 package winsome.client;
 
 import winsome.common.config.*;
-import winsome.util.Common;
+import winsome.util.Debug;
 
 final class WinsomeClientMain {
 
 	public static final String CONFIG_FNAME = "clientConfig.txt";
 	
 	public static void main(String[] args) {
-		Common.setDebug(); Common.setDbgFile("clientDebug.txt");
+		Debug.setDebug();
+		//Debug.setDbgStream("clientDebug.txt");
 		WinsomeClient client = null;
 		int exitCode = 0;
 		try {
@@ -17,9 +18,7 @@ final class WinsomeClientMain {
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 			exitCode = 1;
-		} finally {
-			try { client.close(); } catch (Exception e) { exitCode = 1; }
-		}
-		Common.exit(exitCode);
+		} finally { try { client.close(); } catch (Exception e) { exitCode = 1; } }
+		Debug.exit(exitCode);
 	}
 }

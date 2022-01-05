@@ -1,6 +1,6 @@
 # File di configurazione del client
 # Indirizzo del server
-SERVER		=	192.168.1.2
+SERVER		=	192.168.1.120
 
 # Porta TCP del server
 TCPPORT		=	6666
@@ -22,3 +22,10 @@ REGPORT		=	7777
 
 # Timeout della socket
 TIMEOUT		=	100000
+
+# Input
+#INPUT		=	pippo.txt
+
+# TODO
+# title.length <= 20
+# content.length <= 500

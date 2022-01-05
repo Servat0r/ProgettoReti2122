@@ -24,13 +24,13 @@ public final class MessageNIOTestServerMain {
 	}
 	
 	private static void closeConnExit(SelectionKey key) throws IOException {
-		Common.printLn(LOGSTR + "Connection closed for " + printClient((SocketChannel)key.channel()) );
+		Common.println(LOGSTR + "Connection closed for " + printClient((SocketChannel)key.channel()) );
 		try { key.cancel(); key.channel().close(); }
 		catch (IOException ioe) { System.exit(1); }
 	}
 	
 	public static void main(String[] args) {
-		Common.printLn(System.getProperty(Common.DEBUGPROP));
+		Common.println(System.getProperty(Debug.DEBUGPROP));
 		try (
 			ServerSocketChannel listener = ServerSocketChannel.open();
 			Selector selector = Selector.open();
@@ -70,8 +70,8 @@ public final class MessageNIOTestServerMain {
 								msg = Message.recvFromChannel(client, buffer);
 								if (msg != null) {
 									System.out.println(LOGSTR + "Message received : " + msg.toString());
-									byte idCode = msg.getIdCode();
-									byte paramCode = msg.getParamCode();
+									int idCode = msg.getIdCode();
+									int paramCode = msg.getParamCode();
 									List<String> arguments = msg.getArguments();
 									for (int i = 0; i < arguments.size(); i++) {
 										arguments.set(i, arguments.get(i).toUpperCase());
@@ -80,9 +80,9 @@ public final class MessageNIOTestServerMain {
 									objs[1] = new Message(idCode, paramCode, arguments);
 								} else closeConnExit(key);
 							} else if (key.isWritable()) {
-								Common.printLn(LOGSTR + "Writing message...");
+								Common.println(LOGSTR + "Writing message...");								
 								if (msg.sendToChannel(client, buffer)) {
-									Common.printLn(LOGSTR + "Message sent : " + msg.toString());
+									Common.println(LOGSTR + "Message sent : " + msg.toString());
 									buffer.clear();
 									objs[1] = null;
 									key.interestOps(SelectionKey.OP_READ);

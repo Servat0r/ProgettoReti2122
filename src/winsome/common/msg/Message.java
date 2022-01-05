@@ -1,12 +1,11 @@
 package winsome.common.msg;
 
 import java.io.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.net.SocketException;
 import java.nio.channels.*;
 import java.util.*;
 
+import winsome.annotations.NotNull;
 import winsome.client.command.*;
 import winsome.util.*;
 
@@ -24,6 +23,13 @@ import winsome.util.*;
  */
 
 public final class Message {
+	
+	public static final String
+	INV_ID_BYTE = "Invalid identifier: '%d'",
+	INV_PARAM_BYTE = "Invalid param: '%s'",
+	INV_ID_STR = "Invalid identifier: '%s'",
+	INV_PARAM_STR = "Invalid param: '%s'",
+	UNKNOWN_MSG = "Unknwown message";
 	
 	public static final String
 		OK = "ok", /* Operazione con successo + eventuali risultati */
@@ -63,8 +69,10 @@ public final class Message {
 		DELETE, REWIN, RATE, COMMENT, WALLET, HELP, QUIT, EXIT
 	);
 	
+	private static final List<String> emptyList = Arrays.asList(EMPTY);
+	
 	public static final Map<String, List<String>> CODES = Common.newHashMapFromLists(
-		Arrays.asList(OK, LIST, SHOW, WALLET, HELP),
+		COMMANDS,
 		/*
 		 * EMPTY -> messaggio (di conferma)
 		 * INFO -> messaggio, ip, port(, udp?), <utente : tags>
@@ -73,57 +81,84 @@ public final class Message {
 		 * WALLET -> messaggio, valore, <transazione>
 		 */
 		Arrays.asList(
-			Arrays.asList(EMPTY, INFO, LIST, POST, WALLET),
+			Arrays.asList(EMPTY, INFO, LIST, POST, WALLET, QUIT, EXIT),
+			emptyList,
+			emptyList,			
+			emptyList,			
+			emptyList,			
+			emptyList,			
+			emptyList,			
 			Arrays.asList(USERS, FOLLOWERS, FOLLOWING),
+			emptyList,			
+			emptyList,			
+			emptyList,			
+			emptyList,			
 			Arrays.asList(FEED, POST),
+			emptyList,			
+			emptyList,			
+			emptyList,			
+			emptyList,			
 			Arrays.asList(EMPTY, BTC),
-			Arrays.asList(EMPTY, CMD)
+			Arrays.asList(EMPTY, CMD),
+			emptyList,			
+			emptyList		
 		)
 	);
-		
-	private static byte[] readNBytes(InputStream in, int length) throws IOException {
-		Common.andAllArgs(in != null, length >= 0);
-		List<Byte> total = new ArrayList<>();
-		int bread = 0, res;
-		while (bread < length) {
-			res = in.read();
-			if (res == -1) break;
-			else total.add((byte)res);
-			bread++;
-		}
-		byte[] result = new byte[bread];
-		for (int i = 0; i < bread; i++) result[i] = total.get(i);
-		return result;
-	}
-
-	private final byte idCode;
-	private final byte paramCode;
-	private final int argN;
+	
+	private final int idCode, paramCode, argN;
+	@NotNull
+	private final String idStr, paramStr;
+	@NotNull
 	private final List<String> arguments;
 	private int length;
-
-	public static final byte[] getCode(String id, String param) throws MessageException {
+	
+	/**
+	 * Converts a couple (id, param) representing id and param of a Message object into its corresponding
+	 * byte couple as byte array.
+	 * @param id Message identifier.
+	 * @param param Message param.
+	 * @return A byte array containing encoding of (id, param).
+	 * @throws MessageException If id corresponds to an invalid command or param corresponds to an invalid param.
+	 * @throws IllegalArgumentException If id == null.
+	 */
+	@NotNull
+	public static final int[] getCode(String id, String param) throws MessageException {
 		Common.notNull(id);
 		if (param == null) param = EMPTY;
-		byte[] result = new byte[] {-1, -1}; // -1 -> not given
-		result[0] = (byte)COMMANDS.indexOf(id);
-		if (result[0] == -1) throw new MessageException(Common.excStr("Invalid command"));
+		int[] result = new int[] {-1, -1}; // -1 -> not given
+		result[0] = COMMANDS.indexOf(id);
+		if (result[0] == -1) throw new MessageException(Common.excStr(INV_ID_STR, id));
 		List<String> cvect = CODES.get(id);
-		if (result[0] >= 0 && (cvect != null)) result[1] = (byte)cvect.indexOf(param);
+		result[1] = cvect.indexOf(param);
+		if (result[1] == -1) throw new MessageException(Common.excStr(INV_PARAM_STR, param));
 		return result;
 	}
 	
-	public static final byte[] getCode(String id) throws MessageException { return getCode(id, null); }
+	@NotNull
+	public static final int[] getCode(String id) throws MessageException { return getCode(id, null); }
 	
-	public static final String[] getIdParam(byte idCode, byte paramCode) throws MessageException {
-		Common.andAllArgs(idCode >= 0, idCode < (byte)COMMANDS.size(), paramCode >= -1);
-		String id = new String(COMMANDS.get((int)idCode));
+	/**
+	 * Decodes (idCode, paramCode) into a couple (id, param) representing id and param of the current message.
+	 * @param idCode Byte representing id.
+	 * @param paramCode Byte representing param (-1 if there are no params).
+	 * @return A String array of length 2 containing the decoded strings.
+	 * @throws MessageException For unrecognized id or param.
+	 */
+	@NotNull
+	public static final String[] getIdParam(int idCode, int paramCode) throws MessageException {
+		if ( !(idCode >= 0 && idCode < COMMANDS.size()) )
+			throw new MessageException(Common.excStr(INV_ID_BYTE, idCode));
+		
+		if ( !(paramCode >= -1) )
+			throw new MessageException(Common.excStr(INV_PARAM_BYTE, paramCode));
+		
+		String id = new String(COMMANDS.get(idCode));
 		String param = new String(EMPTY);
 		List<String> l = CODES.get(id);
-		if (l != null) {
-			if ( paramCode == -1 || (paramCode >= (byte)l.size()) ) throw new MessageException(Common.excStr("Invalid param"));
-			param = new String( COMMANDS.get((int)paramCode) );
-		}
+		if (l == null) throw new IllegalStateException();
+		if ( paramCode == -1 || (paramCode >= l.size()) )
+			throw new MessageException(Common.excStr( INV_PARAM_BYTE, paramCode));
+		param = new String( l.get(paramCode) );
 		return new String[] {id, param};
 	}
 
@@ -134,188 +169,316 @@ public final class Message {
 	 * POST -> messaggio, title, content, likes, dislikes, <comment>
 	 * WALLET -> messaggio, valore, <transazione>
 	 */
-	public static Message newConfirm(String message) throws MessageException {
-		return new Message( OK, EMPTY, Arrays.asList(message) );
+	/**
+	 * Creates a new OK message with a confirmation text message for the receiver.
+	 * @param message Text message for the receiver.
+	 * @return A new OK Message object.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newOK(String format, Object...objs) {
+		String message = String.format(format, objs);
+		try { return new Message( OK, EMPTY, Common.toList(message) ); } catch (MessageException mex) { return null; }
+	}
+	
+	/**
+	 * 
+	 * @param message Text message for the receiver.
+	 * @return
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newError(String format, Object...objs) {
+		String message = String.format(format, objs);
+		try{ return new Message(ERR, EMPTY, Common.toList(message)); } catch (MessageException mex) { return null; }
 	}
 
-	public static Message newInfo(String message, String ip, int port, List<String> users) throws MessageException {
-		List<String> args = Arrays.asList(message, ip, Integer.toString(port));
-		if (!args.addAll(users)) throw new MessageException(Common.excStr("Failed to create argument list"));
-		return new Message(OK, INFO, args);
+	/**
+	 * Creates a new info message (multicast data + followers list) for the receiver.
+	 * @param message Text message for the receiver.
+	 * @param ip Multicast group IP address.
+	 * @param port Multicast group port.
+	 * @param users Followers.
+	 * @return A new INFO Message object.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newInfo(String ip, int port, int mcastMsgLen, List<String> users, String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(users, message, ip, Integer.toString(port), Integer.toString(mcastMsgLen));
+		try { return new Message(OK, INFO, args); } catch (MessageException mex) { return null; }
+	}
+	
+	/**
+	 * Creates a new list message (username+tags for "list following" and "list users", 
+	 * id+author+title for "show feed" and "blog").
+	 * @param message Text message for the receiver.
+	 * @param items User info / Post info strings.
+	 * @return A new LIST Message object.
+	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newList(List<String> items, String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(items, message);
+		try { return new Message(OK, LIST, args); } catch (MessageException mex) { return null; }
+	}
+	
+	/**
+	 * 
+	 * @param message Text message for the receiver.
+	 * @param title
+	 * @param content
+	 * @param likes
+	 * @param dislikes
+	 * @param comments
+	 * @return
+	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newPost(String title, String content, long likes, long dislikes,
+		List<String> comments, String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(comments, message, title, content, Long.toString(likes), Long.toString(dislikes));
+		try { return new Message(OK, POST, args); } catch (MessageException mex) { return null; }
+	}
+	
+	public static Message newPost(List<String> postData, String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(postData, message);
+		try { return new Message(OK, POST, args); } catch (MessageException mex) { return null; }
+	}
+	
+	/**
+	 * 
+	 * @param message Text message for the receiver.
+	 * @param value
+	 * @param transactions
+	 * @return
+	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newWallet(double value, List<String> transactions, String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(transactions, message, Double.toString(value));
+		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
+	}
+	
+	/**
+	 * 
+	 * @param message Text message for the receiver.
+	 * @param btcValue
+	 * @param value
+	 * @param transactions
+	 * @return
+	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newBtcWallet(double btcValue, double value, List<String> transactions,
+		String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(transactions, message, Double.toString(btcValue), Double.toString(value));
+		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
+	}
+	
+	public static Message newQuit(String fmt, Object...objects) {
+		String message = String.format(fmt, objects);
+		List<String> args = Common.toList(message);
+		try { return new Message(OK, QUIT, args); } catch (MessageException mex) { return null; }		
+	}
+	
+	@NotNull
+	public static Message newMessageFromCmd(Command cmd) throws MessageException {
+		Common.notNull(cmd);
+		List<String> args = Common.toList(cmd.getArgs());
+		return new Message(cmd.getId(), cmd.getParam(), args);
 	}
 
-	public static Message newList(String message, List<String> items) throws MessageException {
-		List<String> args = Arrays.asList(message);
-		if (!args.addAll(items)) throw new MessageException(Common.excStr("Failed to create argument list"));
-		return new Message(OK, LIST, args);
-	}
-
-	public static Message newPost(String message, String title, String content, long likes, long dislikes, List<String> comments)
-		throws MessageException {
-		List<String> args = Arrays.asList(message, title, content, Long.toString(likes), Long.toString(dislikes));
-		if (!args.addAll(comments)) throw new MessageException(Common.excStr("Failed to create argument list"));
-		return new Message(OK, POST, args);
-	}
-
-	public static Message newWallet(String message, double value, List<String> transactions) throws MessageException {
-		List<String> args = Arrays.asList(message, Double.toString(value));
-		if (!args.addAll(transactions)) throw new MessageException(Common.excStr("Failed to create argument list"));
-		return new Message(OK, WALLET, args);
-	}
-
-	public static Message newBtcWallet(String message, double btcValue, double value, List<String> transactions)
-		throws MessageException {
-		List<String> args = Arrays.asList(message, Double.toString(btcValue), Double.toString(value));
-		if (!args.addAll(transactions)) throw new MessageException(Common.excStr("Failed to create argument list"));
-		return new Message(OK, WALLET, args);
-	}
-
-	public static Message newError(String message) throws MessageException {
-		return new Message(ERR, EMPTY, Arrays.asList(message));
-	}
-
+	/**
+	 * 
+	 * @param id
+	 * @param param
+	 * @param arguments
+	 * @throws MessageException
+	 */
 	public Message(String id, String param, List<String> arguments) throws MessageException {
 		Common.notNull(id);
-		byte[] codes = Message.getCode(id, param);
+		if (param == null) param = Message.EMPTY;
+		int[] codes = Message.getCode(id, param);
 		this.idCode = codes[0];
 		this.paramCode = codes[1];
-		this.argN = (arguments != null ? arguments.size() : 0);
-		this.arguments = arguments;
+		this.idStr = id;
+		this.paramStr = param;
+		this.arguments = (arguments != null ? arguments : new ArrayList<>());
+		this.argN = this.arguments.size();
 		int argsLen = 0;
-		if (arguments != null) {
-			for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
-		}
-		this.length = 6 + 4 * this.argN + argsLen;
+		for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
+		this.length = 3 * Integer.BYTES + Integer.BYTES * this.argN + argsLen;
 	}
-
-	public Message(Command cmd) throws MessageException { this(cmd.getId(), cmd.getParam(), cmd.getArgs()); }
-
-	public Message(byte idCode, byte paramCode, List<String> arguments) throws MessageException {
+	
+	/**
+	 * 
+	 * @param idCode
+	 * @param paramCode
+	 * @param arguments
+	 * @throws MessageException
+	 */
+	public Message(int idCode, int paramCode, List<String> arguments) throws MessageException {
+		Common.notNull(arguments);
+		
+		String[] strCodes = Message.getIdParam(idCode, paramCode);
+		
 		this.idCode = idCode;
-		this.paramCode = paramCode;
-		this.argN = (arguments != null ? arguments.size() : 0);
-		this.arguments = arguments;
+		this.paramCode = paramCode;		
+		this.idStr = strCodes[0];
+		this.paramStr = strCodes[1];
+		this.arguments = (arguments != null ? arguments : new ArrayList<>());
+		this.argN = this.arguments.size();
 		int argsLen = 0;
-		if (arguments != null) {
-			for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
-		}
-		this.length = 6 + 4 * this.argN + argsLen;
+		for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
+		this.length = 3 * Integer.BYTES + Integer.BYTES * this.argN + argsLen;
 	}
 
-	public final String getIdStr() {
-		Common.andAllArgs(idCode >= 0, idCode < (byte)COMMANDS.size());
-		return new String(COMMANDS.get((int)idCode));
-	}
-	
-	public final String getParamStr() throws MessageException {
-		Common.andAllArgs(paramCode >= -1);
-		String id = this.getIdStr();
-		String param = new String(EMPTY);
-		List<String> l = CODES.get(id);
-		if (l != null) {
-			if ( paramCode == -1 || (paramCode >= (byte)l.size()) ) throw new MessageException(Common.excStr("Invalid param"));
-			param = new String( COMMANDS.get((int)paramCode) );
+	public final byte[] encode() {
+		byte[] result = new byte[this.length + Integer.BYTES];
+		int index = 0;
+		index += Common.intsToByteArray(result, index, this.length, this.idCode, this.paramCode, this.argN);
+		for (int i = 0; i < this.argN; i++) {
+			index += Common.lengthStringToByteArray(result, index, this.arguments.get(i));
 		}
-		return param;
+		Common.allAndState(index == result.length);
+		return result;
 	}
 	
+	/**
+	 * 
+	 * @return
+	 */
+	@NotNull
+	public final String getIdStr() { return this.idStr; }
+	
+	/**
+	 * 
+	 * @return
+	 * @throws MessageException
+	 */
+	@NotNull
+	public final String getParamStr() { return this.paramStr; }
+	
+	/**
+	 * 
+	 * @return
+	 * @throws MessageException
+	 */
+	@NotNull
 	public final String[] getIdParam() throws MessageException {
-		return new String[] {getIdStr(), getParamStr()};
+		return new String[] {idStr, paramStr};
 	}
 	
-	public final byte getIdCode() { return idCode; }
-	public final byte getParamCode() { return paramCode; }
+	public final int getIdCode() { return idCode; }
+	public final int getParamCode() { return paramCode; }
 	public final int getArgN() { return argN; }
 	public final List<String> getArguments() { return arguments; }
 	public final int getLength() { return length; }
 	
+	/**
+	 * 
+	 * @param chan
+	 * @param buf
+	 * @throws IOException
+	 */
 	public final boolean sendToChannel(WritableByteChannel chan, MessageBuffer buf) throws IOException {
 		Common.notNull(chan, buf);
-		String cstr;
 		buf.clear();
-		try {
-			buf.readAllFromArray(new byte[] {idCode, paramCode}, chan);
-			buf.readAllFromArray(Common.intToByteArray(argN), chan);
-			for (int i = 0; i < argN; i++) {
-				cstr = arguments.get(i);
-				buf.readAllFromArray(Common.intToByteArray(cstr.length()), chan);
-				buf.readAllFromArray(cstr.getBytes(), chan);
-			}
-			return true;
-		} catch (SocketException ex) { return false; }
+		byte[] data = this.encode();
+		try { buf.readAllFromArray(data, chan); return true; }
+		catch (SocketException | ConnResetException ex) { return false; }
 	}
 	
+	/**
+	 * 
+	 * @param out
+	 * @throws IOException
+	 */
 	public final boolean sendToStream(OutputStream out) throws IOException {
-		Common.notNull(out);
-		byte[] cArg;
-		try {
-			out.write(new byte[] {this.idCode, this.paramCode});
-			out.write(Common.intToByteArray(this.argN));
-			for (int i = 0; i < this.argN; i++) {
-				cArg = this.arguments.get(i).getBytes();
-				out.write(Common.intToByteArray(cArg.length));
-				out.write(cArg);
-			}
-			return true;
-		} catch (SocketException ex) { return false; }
+		Common.notNull(out);		
+		byte[] data = this.encode();
+		try { out.write(data); return true; } catch (SocketException se) { return false; }
 	}
 
+	/**
+	 * Reads a complete message from a channel using a MessageBuffer as support.
+	 * @param chan Input channel.
+	 * @param buf MessageBuffer from which data "transients".
+	 * @return A Message object representing the message received on success, null if message
+	 * reading has not correctly completed (e.g. EOS closed by other peer).
+	 * @throws IOException Thrown by {@link MessageBuffer#writeAllToArray(int, ReadableByteChannel)}
+	 * @throws MessageException Thrown by {@link #getIdParam(byte, byte)} (invalid id/param) or by
+	 * Message constructor.
+	 */
+	@NotNull
 	public static final Message recvFromChannel(ReadableByteChannel chan, MessageBuffer buf)
 			throws IOException, MessageException {
 		Common.notNull(chan, buf);
 		String cArg;
 		buf.clear();
-		byte[] readArr = buf.writeAllToArray(6, chan);
-		if (readArr == null) return null; /* EOS reached etc. */
-		String[] strCodes = Message.getIdParam(readArr[0], readArr[1]);
-		int argN = Common.intFromByteArray(readArr, 2);
-		Common.debugf("after reading %d bytes: argN = %d%n", readArr.length, argN);		
+		byte[] readArr = buf.writeAllToArray(Integer.BYTES, chan);
+		if (!(readArr != null && readArr.length == Integer.BYTES)) throw new ConnResetException(); /* EOS reached etc. */
+		int length = Common.intFromByteArray(readArr);
+		readArr = buf.writeAllToArray(length, chan);
+		if (!(readArr != null && readArr.length == length)) throw new ConnResetException(); /* EOS reached etc. */
+		int idCode = Common.intFromByteArray(readArr), paramCode = Common.intFromByteArray(readArr, Integer.BYTES);
+		String[] strCodes = Message.getIdParam(idCode, paramCode);
+		int argN = Common.intFromByteArray(readArr, Integer.BYTES * 2);
+		int index = 3 * Integer.BYTES;
 		List<String> arguments = new ArrayList<>();
 		for (int i = 0; i < argN; i++) {
-			readArr = buf.writeAllToArray(4, chan);
-			int clen = Common.intFromByteArray(readArr);
-			readArr = buf.writeAllToArray(clen, chan);
-			cArg = new String(readArr);
-			Common.debugf("arg #%d : %s (%d long)%n", i, cArg, clen);
+			int clen = Common.intFromByteArray(readArr, index);
+			index += Integer.BYTES;
+			cArg = new String(readArr, index, clen);
+			index += clen;
 			arguments.add(cArg);
 		}
 		return new Message(strCodes[0], strCodes[1], arguments);
 	}
 	
+	/**
+	 * 
+	 * @param in
+	 * @return
+	 * @throws IOException
+	 * @throws MessageException
+	 */
+	@NotNull
 	public static final Message recvFromStream(InputStream in) throws IOException, MessageException {
 		Common.notNull(in);
-		byte[] byteCodes = readNBytes(in, 2); /* idCode, paramCode */
-		if (byteCodes.length < 2) return null; /* EOS reached or Exception thrown */
-		String[] strCodes = Message.getIdParam(byteCodes[0], byteCodes[1]);
-		Integer argN = Common.intFromByteArray(readNBytes(in, 4));
-		if (argN == null) return null;
+		
+		byte[] lengthArr = in.readNBytes(4);
+		int length = Common.intFromByteArray(lengthArr);
+		
+		byte[] result = in.readNBytes(length);
+		Common.allAndState(result.length == length);
+		
+		
+		int idCode = Common.intFromByteArray(result);
+		int paramCode = Common.intFromByteArray(result, Integer.BYTES);
+		int argN = Common.intFromByteArray(result, 2 * Integer.BYTES);
+		
+		String[] strCodes = Message.getIdParam(idCode, paramCode);
+		
+		int index = 3 * Integer.BYTES;
+				
 		List<String> arguments = new ArrayList<>();
-		Integer clen;
+		int clen;
 		for (int i = 0; i < argN; i++) {
-			clen = Common.intFromByteArray(readNBytes(in, 4));
-			if (clen == null) return null;
-			byte[] nextStr = readNBytes(in, clen);
-			if (nextStr.length < clen) return null;
-			arguments.add( new String(nextStr) );
+			clen = Common.intFromByteArray(result, index);
+			index += Integer.BYTES;
+			String str = new String(result, index, clen);
+			index += clen;
+			arguments.add(str);
 		}
 		return new Message(strCodes[0], strCodes[1], arguments);
 	}
 	
+	@NotNull
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		try {
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + f.getName() + " = " + f.get(this) );
-					if (!first) first = true;
-				}
-			}
-		} catch (IllegalAccessException ex) { return null; }
-		sb.append("]");
-		return sb.toString();
+		return String.format("%s : %s", this.getClass().getSimpleName(), Serialization.GSON.toJson(this));
 	}
 }

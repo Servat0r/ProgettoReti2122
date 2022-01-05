@@ -1,7 +1,10 @@
 package winsome.util;
 
 import java.io.IOException;
-import java.io.PrintStream;
+import java.io.InputStream;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -13,6 +16,18 @@ import java.util.concurrent.*;
 public final class Common {
 	
 	private Common() {}
+	
+	/* THREADS */
+	public static boolean sleep(long millis) {
+		try { Thread.sleep(millis); return true; } 
+		catch (InterruptedException ex) { return false; }
+	}
+	
+	public static boolean sleep(long millis, int nanos) {
+		try { Thread.sleep(millis, nanos); return true; }
+		catch (InterruptedException ex) { return false; }
+	}
+	/* THREADS */
 	
 	/* QUOTING */
 	public static String quote(String str) {
@@ -26,121 +41,45 @@ public final class Common {
 		else return new String(str);
 	}
 	/* QUOTING */
-		
+	
 	/* PRINTING */
-	public static void printLn(Object obj) { System.out.println(obj); }
-	public static void printLn() { System.out.println(); }
+	public static void println(Object obj) { System.out.println(obj); }
+	public static void println() { System.out.println(); }
 	public static void print(Object obj) { System.out.print(obj); }
 	public static void printf(String format, Object... args) { System.out.printf(format, args); }
-	public static void printErrLn(Object obj) { System.err.println(obj); }
-	public static void printErrLn() { System.err.println(); }
+	public static void printErrln(Object obj) { System.err.println(obj); }
+	public static void printErrln() { System.err.println(); }
 	public static void printErr(Object obj) { System.err.print(obj); }
 	public static void printfErr(String format, Object... args) { System.err.printf(format, args); }
 	/* PRINTING */
-	
-	/* DEBUGGING */
-	private static final String DBGSEPAR = ": ";
-	private static PrintStream dbgStream = System.out;
-	private static final String DEBUGSTR = "DEBUG" + DBGSEPAR;
-	public static final String DEBUGPROP = "debug"; /* System property for enabling debugging. */
-	public static final String DEBUGFILE = "debug.txt"; /* Default debug file. */
-	
-	/**
-	 * Enables debug printings.
-	 */
-	public static void setDebug() { System.setProperty(DEBUGPROP, "true"); }
-	
-	/**
-	 * Disables debug printings.
-	 */
-	public static void resetDebug() { System.setProperty(DEBUGPROP, "false"); }
-	
-	/**
-	 * Clears debug property.
-	 */
-	public static void clearDebug() { System.clearProperty(DEBUGPROP); }
-	
-	/**
-	 * Sets debug file to the specified filename.
-	 * @param filename (Relative) path of the file.
-	 */
-	public static synchronized void setDbgFile(String filename) {
-		Common.notNull(filename);
-		try { dbgStream = new PrintStream(filename); }
-		catch (Exception ex) { dbgStream = System.out; }
-	}
-	
-	/**
-	 * Sets debug file to default value.
-	 */
-	public static synchronized void setDbgFile() { setDbgFile(DEBUGFILE); }
-	
-	/**
-	 * Sets debug printing to default stream (System.out).
-	 */
-	public static synchronized void resetDgbStream() { dbgStream = System.out; }
-	
-	/**
-	 * Prints a line of the form "DEBUG: 'fname' : [obj.toString()]".
-	 * @param fname Message of the debug line.
-	 * @param obj Object to debug (prints 'null' if null, otherwise invokes obj.toString()).
-	 */
-	public static void debugln(String fname, Object obj) {
-		String debug = System.getProperty(DEBUGPROP);
-		if (debug != null && debug.equals("true"))
-			dbgStream.println( DEBUGSTR + fname + DBGSEPAR + (obj != null ? obj.toString() : "null") );
-	}
-	
-	/**
-	 * Debug printing indicating the invoking function and the current source code line.
-	 * @param obj Object to debug (prints 'null' if null, otherwise invokes obj.toString()).
-	 */
-	public static void debugln(Object obj) {
-		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
-		int fline = Thread.currentThread().getStackTrace()[2].getLineNumber();
-		Common.debugln(fname + (fline >= 0 ? " at line " + fline : ""), obj);
-	}
-	
-	public static void debugf(String fname, String format, Object... objs) {
-		String debug = System.getProperty(DEBUGPROP);
-		if (debug != null && debug.equals("true")) dbgStream.printf(DEBUGSTR + fname + DBGSEPAR + format, objs);
-	}
-	
-	public static void debugf(String format, Object... objs) {
-		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
-		int fline = Thread.currentThread().getStackTrace()[2].getLineNumber();
-		Common.debugf(fname + (fline >= 0 ? " at line" + fline : ""), format, objs);
-	}
-	
-	public static void debugExc(Exception ex) { ex.printStackTrace(dbgStream); }
-	
-	public static void exit(int code) {
-		String debug = System.getProperty(DEBUGPROP);
-		if (debug != null && debug.equals("true") && (dbgStream != System.out)) { dbgStream.close(); dbgStream = System.out; }
-		System.exit(code);
-	}
-	/* DEBUGGING */
 	
 	/* EXCEPTIONS MESSAGES FORMATTING */
 	public static String excStr(String format, Object ...objs) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
 		String msg = String.format(format, objs);
-		return (fname + DBGSEPAR + msg);
+		return (fname + Debug.DBGSEPAR + msg);
 	}
 	
 	public static boolean isConnReset(IOException ioe) {
 		Common.notNull(ioe);
-		return ioe.getMessage().contains("Connection reset");
+		return ioe.getMessage().contains("Connection reset by peer");
 	}
 	/* EXCEPTIONS MESSAGES FORMATTING */
 	
 	/* PARAMS CHECKING */
+	private static final String EXCSTR = "Condition #%d is NOT satisfied!";
+	
 	public static void notNull(String msg, Object ...objs) {
 		for (int i = 0; i < objs.length; i++) if (objs[i] == null)
-			throw new NullPointerException( excStr("arg #%d%s%s", i+1, DBGSEPAR, msg) );
+			throw new NullPointerException( excStr("arg #%d%s%s", i+1, Debug.DBGSEPAR, msg) );
 	}
 	
 	public static void notNull(Object ...objs) { notNull("is null!", objs); }
+	
+	public static <T> void collectionNotNull(Collection<T> coll) {
+		Common.notNull(coll);
+		for (T elem : coll) Common.notNull(elem);
+	}
 	
 	public static void positive(int ...nums) {
 		for (int n : nums) if (n <= 0) throw new IllegalArgumentException();
@@ -149,20 +88,25 @@ public final class Common {
 	public static void notNeg(int ...nums){
 		for (int n : nums) if (n < 0) throw new IllegalArgumentException();
 	}
-	
+		
 	public static void andAllArgs(boolean ...conds) {
 		for (int i = 0; i < conds.length; i++)
-			if (!conds[i]) throw new IllegalArgumentException(Common.excStr("Condition #" + (i+1) + " NOT satisfied!"));
+			if (!conds[i]) throw new IllegalArgumentException(Common.excStr(EXCSTR, i+1));
 	}
 	
 	public static void allAndState(boolean ...conds) {
 		for (int i = 0; i < conds.length; i++)
-			if (!conds[i]) throw new IllegalStateException();
+			if (!conds[i]) throw new IllegalStateException(Common.excStr(EXCSTR, i+1));
 	}
 	
 	public static void orAll(boolean ...conds) {
 		for (int i = 0; i < conds.length; i++) if (conds[i]) return;
 		throw new IllegalArgumentException(Common.excStr("No condition satisfied"));
+	}
+	
+	public static boolean andAll(Object obj, boolean ...conds) {
+		for (boolean cond : conds) if (!cond) return false;
+		return true;
 	}
 	/* PARAMS CHECKING */
 	
@@ -175,18 +119,28 @@ public final class Common {
 	}
 	
 	public static int intSum(Collection<Integer> coll) {
+		Common.collectionNotNull(coll);
 		int s = 0;
 		for (Integer i : coll) s += i;
 		return s;
 	}
 	
 	public static double doubleSum(Collection<Double> coll) {
+		Common.collectionNotNull(coll);
 		double s = 0.0;
 		for (Double i : coll) s += i;
 		return s;
 	}
+		
+	public static long longSum(Collection<Long> coll) {
+		Common.collectionNotNull(coll);
+		long s = 0;
+		for (Long i : coll) s += i;
+		return s;
+	}
 	
 	public static int max(Collection<Integer> coll) {
+		Common.collectionNotNull(coll);
 		boolean set = false;
 		int result = 0;
 		for (int val : coll) {
@@ -196,33 +150,95 @@ public final class Common {
 		return result;
 	}
 	
-	public static <K> int sum(Map<K, Integer> map){
+	public static int min(Collection<Integer> coll) {
+		Common.collectionNotNull(coll);
+		boolean set = false;
+		int result = 0;
+		for (int val : coll) {
+			if (!set) { result = val; set = true; }
+			else result = Math.min(val, result);
+		}
+		return result;
+	}
+	
+	public static <K> int intMapSum(Map<K, Integer> map){
 		int s = 0;
 		synchronized (map) { for (Integer v : map.values()) s += v; }
 		return s;
 	}
 	
 	public static byte[] intToByteArray(final int num) {
-		return new byte[] {
-			(byte) ((num >> 24) & 0xff),
-			(byte) ((num >> 16) & 0xff),
-			(byte) ((num >> 8) & 0xff),
-			(byte) ((num >> 0) & 0xff)
-		};
+		ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES);
+		buf.putInt(num);
+		Common.allAndState(buf.array().length == Integer.BYTES);
+		return buf.array();
 	}
+	
+	public static int intsToByteArray(byte[] result, int startIndex, int... nums) {
+		Common.andAllArgs(result != null, startIndex >= 0, startIndex + Integer.BYTES * nums.length <= result.length);
+		for (int i = 0; i < nums.length; i++) {
+			byte[] res = Common.intToByteArray(nums[i]);
+			for (int j = 0; j < Integer.BYTES; j++) result[startIndex + j] = res[j];
+			startIndex += Integer.BYTES;
+		}
+		return Integer.BYTES * nums.length;
+	}
+	
+	public static int lengthStringToByteArray(byte[] result, int startIndex, String str) {
+		Common.andAllArgs(result != null, str != null, startIndex >= 0, startIndex + str.getBytes().length <= result.length);
+		byte[] bstr = str.getBytes();
+		int len = bstr.length;
+		int res = Common.intsToByteArray(result, startIndex, len);
+		for (int i = 0; i < len; i++) result[startIndex + res + i] = bstr[i];
+		res += len;
+		return res;
+	}
+	
 	
 	public static Integer intFromByteArray(byte[] arr, int startIndex) {
 		Common.notNull(arr); Common.notNeg(startIndex);
 		if (startIndex + 3 >= arr.length) throw new IllegalArgumentException();
 		int num = 0;
-		num += ( ((int)arr[startIndex]) << 24);
-		num += ( ((int)arr[startIndex + 1]) << 16);
-		num += ( ((int)arr[startIndex + 2]) << 8);
-		num += ( ((int)arr[startIndex + 3]) << 0);
+		byte[] aux = new byte[Integer.BYTES];
+		for (int i = 0; i < Integer.BYTES; i++) aux[i] = arr[startIndex + i];
+		ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES);
+		buf.put(arr, startIndex, Integer.BYTES);
+		buf.flip();
+		num = buf.getInt();
 		return num;
 	}
 	
 	public static Integer intFromByteArray(byte[] arr) { return intFromByteArray(arr, 0); }
+	
+	public static byte[] readNBytes(InputStream in, int length) throws IOException {
+		Common.andAllArgs(in != null, length >= 0);
+		List<Byte> total = new ArrayList<>();
+		int bread = 0, res;
+		while (bread < length) {
+			res = in.read();
+			if (res == -1) break;
+			else total.add((byte)res);
+			bread++;
+		}
+		byte[] result = new byte[bread];
+		for (int i = 0; i < bread; i++) result[i] = total.get(i);
+		return result;
+	}
+	
+	@SafeVarargs
+	public static <T> List<T> toList(List<T> tail, T... head){
+		List<T> list = new ArrayList<>();
+		for (int i = 0; i < head.length; i++) list.add(head[i]);
+		list.addAll(tail);
+		return list;
+	}
+	
+	@SafeVarargs
+	public static <T> List<T> toList(T... head){
+		List<T> list = new ArrayList<>();
+		for (int i = 0; i < head.length; i++) list.add(head[i]);
+		return list;
+	}
 	
 	/**
 	 * Crea una nuova ConcurrentHashMap da una coppia di array della stessa lunghezza associando per ogni i l'i-esimo elemento 
@@ -258,6 +274,7 @@ public final class Common {
 	public static String newCharSeq(int length, char c) {
 		Common.notNeg(length);
 		StringBuilder sb = new StringBuilder();
+		sb.append("");
 		for (int i = 0; i < length; i++) { sb.append(c); }
 		return sb.toString();
 	}

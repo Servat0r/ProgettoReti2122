@@ -28,11 +28,13 @@ public final class Serialization {
 		POSTLIST_ENTRY = (NUM + SEPAR) + (ALPHANUM + SEPAR) + QUOTED;
 	
 	public static final JsonWriter fileWriter(String filename) throws IOException {
+		Common.notNull(filename);
 		try { return GSON.newJsonWriter( new OutputStreamWriter(new FileOutputStream(filename)) ); }
 		catch (FileNotFoundException ex) { return null; }
 	}
 	
 	public static final JsonReader fileReader(String filename) {
+		Common.notNull(filename);
 		try { return GSON.newJsonReader( new InputStreamReader(new FileInputStream(filename)) ); }
 		catch (FileNotFoundException ex) { return null; }
 	}
@@ -46,7 +48,7 @@ public final class Serialization {
 		for (String key : keys) {
 			List<String> tags = map.get(key);
 			sb = new StringBuilder();
-			sb.append(key + SEPAR + tags.size() + SEPAR);
+			sb.append(key + SEPAR + tags.size());
 			for (String tag : tags) sb.append(" "  + tag);
 			result.add(sb.toString());
 		}
@@ -60,7 +62,7 @@ public final class Serialization {
 		for (String s : serMap) {
 			Common.notNull(s);
 			if (!Pattern.matches(CMAP_ENTRY, s)) {
-				System.err.println(Common.excStr("Item <" + s + "> does not match entry regex!"));
+				System.err.println(Common.excStr("Item '%s' does not match entry regex!", s));
 				return null;
 			}
 			cval = new ArrayList<String>();
@@ -94,18 +96,15 @@ public final class Serialization {
 				System.err.println( Common.excStr("Item <" + s + "> does not match postlist regex!") );
 				return null;
 			}
-
 			cval = new ArrayList<String>();
 			m = Pattern.compile(NUM + SEPAR).matcher(s);
 			m.find();
 			cval.add( new String(s.substring(0, m.end() - SEPAR.length())) );
 			s = s.substring(m.end());
-
 			m = Pattern.compile(ALPHANUM + SEPAR).matcher(s);
 			m.find();
 			cval.add( new String(s.substring(0, m.end() - SEPAR.length())) );
 			s = s.substring(m.end());
-			
 			cval.add(new String(s));
 			result.add(cval);
 		}

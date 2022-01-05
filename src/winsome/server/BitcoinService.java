@@ -18,14 +18,11 @@ final class BitcoinService {
 		URLSTR = "https://www.random.org/decimal-fractions/?num=1&dec=%d&col=1&format=plain&rnd=new";
 		
 	private final URL url;
-	private final PrintStream err;
 	
 	public BitcoinService(int decimals, PrintStream err) throws MalformedURLException {
 		Common.andAllArgs(decimals >= MINDECIMAL, decimals <= MAXDECIMAL);
 		String str = String.format(URLSTR, decimals);
-		Common.printLn(str);
 		this.url = new URL(str);
-		this.err = (err != null ? err : System.err);
 	}
 	
 	public BitcoinService(int decimals) throws MalformedURLException { this(decimals, null); }
@@ -34,29 +31,26 @@ final class BitcoinService {
 	
 	public BitcoinService() throws MalformedURLException { this(DFLDECIMALS); }
 	
-	public final Double convert(double value) {
+	public synchronized final Double convert(double value) throws IOException {
 		URLConnection conn;
-		try {
-			conn = url.openConnection();
-			conn.setReadTimeout(DFLTIMEOUT);
-			conn.connect();
-			InputStream in = conn.getInputStream();
-			List<Byte> reads = new ArrayList<>();
-			int c;
-			while (in.available() > -1) {
-				if ( (c = in.read()) < 0) break;
-				else reads.add((byte)c);
-			}
-			in.close();
-			byte[] bs = new byte[reads.size()];
-			for (int i = 0; i < bs.length; i++) bs[i] = reads.get(i);
-			double exc = Double.parseDouble(new String(bs).strip());
-			return value * exc;
-		} catch (Exception ex) { ex.printStackTrace(err); return null; }
-		
+		conn = url.openConnection();
+		conn.setReadTimeout(DFLTIMEOUT);
+		conn.connect();
+		InputStream in = conn.getInputStream();
+		List<Byte> reads = new ArrayList<>();
+		int c;
+		while (in.available() > -1) {
+			if ( (c = in.read()) < 0) break;
+			else reads.add((byte)c);
+		}
+		in.close();
+		byte[] bs = new byte[reads.size()];
+		for (int i = 0; i < bs.length; i++) bs[i] = reads.get(i);
+		double exc = Double.parseDouble(new String(bs).strip());
+		return value * exc;
 	}
 	
-	public final Double convert(String strvalue) {
+	public synchronized final Double convert(String strvalue) throws IOException {
 		Common.notNull(strvalue);
 		try {
 			double value = Double.parseDouble(strvalue);

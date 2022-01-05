@@ -4,6 +4,7 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.locks.*;
 
+import winsome.annotations.NotNull;
 import winsome.util.Common;
 
 public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
@@ -23,10 +24,9 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 	public synchronized void deserialize(Table<T, V> src) throws DeserializationException {
 		Common.notNull(src);
 		if (!src.isDeserialized()) throw new DeserializationException();
-		if (this.map == null) {
-			NavigableSet<V> vals = src.get(keys);
-			for (V val : vals) this.map.put(val.key(), val);
-		}
+		if (this.map == null) this.map = new TreeMap<>();
+		Set<V> vals = src.get(keys);
+		for (V val : vals) this.map.put(val.key(), val);
 		if (lock == null) lock = new ReentrantReadWriteLock();
 	}
 	
@@ -62,6 +62,7 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		} finally {lock.writeLock().unlock();}
 	}
 	
+	@NotNull
 	public List<V> getAll(){
 		List<V> result = new ArrayList<>();
 		try {
@@ -70,7 +71,8 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 			return result;
 		} finally { lock.readLock().unlock(); }
 	}
-		
+	
+	@NotNull
 	public NavigableSet<T> keySet(){
 		try {lock.readLock().lock(); return Collections.unmodifiableNavigableSet(this.keys);}
 		finally {lock.readLock().unlock();}
@@ -85,16 +87,17 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 			lock.readLock().lock();
 			Field[] fields = this.getClass().getDeclaredFields();
 			boolean first = false;
+			Object currObj;
 			for (int i = 0; i < fields.length; i++) {
 				Field f = fields[i];
 				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + f.getName() + " = " + f.get(this) );
+					try {currObj = f.get(this); } catch (Exception ex) { continue; }
+					sb.append( (first ? ", " : "") + f.getName() + " = " + currObj );
 					if (!first) first = true;
 				}
 			}
 			sb.append("]");
 			return sb.toString();
-		} catch (IllegalAccessException ex) { return null; }
-		finally { lock.readLock().unlock(); }
+		} finally { lock.readLock().unlock(); }
 	}
 }

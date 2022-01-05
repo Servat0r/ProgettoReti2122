@@ -27,9 +27,12 @@ public final class MessageIOTestServerMain {
 						msg = Message.recvFromStream(in);
 						if (msg == null) break; //Connection closed
 						System.out.println(msg.toString() + "\n");
+						String format = "Stringa '%s' ottenuta";
+						
 						for (int i = 0; i < msg.getArgN(); i++) {
 							String cArg = msg.getArguments().get(i);
-							msg.getArguments().set(i, cArg.toUpperCase());
+							String pippo = String.format(format, cArg);
+							msg.getArguments().set(i, pippo);
 						}
 						Thread.sleep(50);
 						if (!msg.sendToStream(out)) break; //Connection closed

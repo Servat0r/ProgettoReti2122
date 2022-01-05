@@ -1,9 +1,12 @@
 package winsome.util;
 
+import java.io.Serializable;
 import java.util.Objects;
 
-public final class Pair<K,V> {
-
+public final class Pair<K,V> implements Serializable {
+	
+	private static final long serialVersionUID = 1L;
+	
 	private K key;
 	private V value;
 	

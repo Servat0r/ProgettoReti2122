@@ -6,6 +6,7 @@ import java.io.*;
 import winsome.client.command.CommandParser;
 import winsome.common.msg.*;
 import winsome.util.Common;
+import winsome.util.Debug;
 
 public final class MessageNIOTestClientMain {
 
@@ -17,23 +18,23 @@ public final class MessageNIOTestClientMain {
 		Socket socket = null;
 		try ( CommandParser parser = new CommandParser(new FileInputStream("cmd_examples.txt")) ){
 			socket = new Socket(HOST, PORT);
-			Common.printLn("Socket connected to " + socket.getInetAddress() + 
+			Common.println("Socket connected to " + socket.getInetAddress() + 
 					" @ " + socket.getPort());
 			InputStream in = socket.getInputStream();
 			OutputStream out = socket.getOutputStream();
 			while (parser.hasNextCmd()) {
-				msg = new Message(parser.nextCmd());
-				Common.printLn(msg);
+				msg = Message.newMessageFromCmd(parser.nextCmd());
+				Common.println(msg);
 				if (!msg.sendToStream(out)) break;
-				Common.debugln("#client_main", "message sent");
+				Debug.println("#client_main", "message sent");
 				Thread.sleep(50);
 				msg = Message.recvFromStream(in);
 				if (msg == null) break;
-				Common.printLn(msg);
+				Common.println(msg);
 			}
 		} catch (SocketException sex) {
 			sex.printStackTrace(System.out);
-			if (socket.isClosed()) Common.printLn("Connection closed by the server");
+			if (socket.isClosed()) Common.println("Connection closed by the server");
 		} catch (Exception ex) {
 			ex.printStackTrace(System.out);
 		} finally { try { socket.close(); } catch (Exception ex) {ex.printStackTrace(System.out);} }

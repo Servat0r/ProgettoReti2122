@@ -1,6 +1,7 @@
 package winsome.client;
 
 import winsome.util.Common;
+import winsome.util.Debug;
 
 import java.io.*;
 import java.net.*;
@@ -44,13 +45,12 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 				this.out.println( new String(packet.getData()) );
 			}
 		} catch (IOException e) {
-			e.printStackTrace(this.err);
-			if (grouped)
-				try {this.socket.leaveGroup(mcastIP); }
+			if (grouped) {
+				try { if (!socket.isClosed()) socket.leaveGroup(mcastIP); }
 				/* this.socket.leaveGroup(addr, net); */
-				catch (IOException e1) { e1.printStackTrace(this.err); }
-				finally { this.out.println(prefix + "Wallet notifying service ended"); }
-			else {
+				catch (IOException e1) { e1.printStackTrace(out); }
+				finally { out.println(prefix + "Wallet notifying service ended"); }
+			} else {
 				String addr = new String(mcastIP.getAddress());
 				this.err.printf(prefix + "Error: could not join multicast group at '%s'!%n", addr);
 			}

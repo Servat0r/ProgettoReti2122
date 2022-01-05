@@ -49,5 +49,8 @@ COREPOOLSIZE	=	-1
 # Massimo numero di threads del pool (se < 0, settato automaticamente al doppio del numero di processori disponibili)
 MAXPOOLSIZE	=	-1
 
-# Tempo di vita in idle dei non-core threads del pool (se < 0, settato automaticamente a 1 minuto)
+# Tempo di vita in millisecondi in idle dei non-core threads del pool (se < 0, settato automaticamente a 1 minuto)
 KEEPALIVETIME	=	-1
+
+# Capacità dei ByteBuffer generati per lo scambio messaggi fra client(s) e server (se < 0, settato automaticamente a 4096)
+BUFFERCAP	=	-1

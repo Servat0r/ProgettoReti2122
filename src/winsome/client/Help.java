@@ -35,7 +35,8 @@ final class Help {
 		"help",
 		
 		"quit",
-		"exit"
+		"exit",
+		"whoami"
 	);
 	
 	private static final Map<String, String> quitMap = newMap(list(""), list("Closes this program if user is logged out"));
@@ -106,7 +107,11 @@ final class Help {
 				list("", "cmd <command>"),
 				list("shows this help guide for all commands", "shows help message for the command specified")
 			),
-			quitMap, quitMap
+			quitMap, quitMap,
+			newMap(
+				list(""),
+				list("Prints the current logged user if any, otherwise prints 'No user logged'")
+			)
 		)
 	);
 	

@@ -9,16 +9,16 @@ import java.net.*;
 
 import winsome.server.data.*;
 import winsome.util.*;
+import winsome.annotations.NotNull;
 import winsome.server.action.*;
 
 final class RewardManager extends Thread {
 	
 	private static final double TOTREWPERC = 100.0;
-	private static final String NOTIFYMSG = "There is a new reward for you!";
+	private static final String NOTIFYMSG = "New reward @ ";
 	private static enum State { INIT, OPEN, CLOSED; };
 	
-	public static final Integer EXIT_SUCCESS = 0, EXIT_FAILURE = 1;
-	
+	private LinkedBlockingQueue<Result> result;
 	private int mcastPort;
 	private MulticastSocket socket;
 	private InetAddress address;
@@ -26,14 +26,19 @@ final class RewardManager extends Thread {
 	private ActionRegistry registry;
 	private RewardCalculator calculator;
 	private State state;
-	private DatagramPacket packet;
-	private Integer exitCode;
+	
+	private DatagramPacket buildPacket() {
+		String msg = NOTIFYMSG + new Date().toString().substring(0, 19);
+		return new DatagramPacket(msg.getBytes(), msg.length(), address, mcastPort);
+	}
+	
+	public final int mcastMsgLen() { return 19 + NOTIFYMSG.length(); }
 	
 	/*
 	 * 1. Crea il socket di multicast e invia le notifiche lì
 	 * 2. Aggiorna i portafogli degli utenti.
 	 */
-	public RewardManager(String mcastAddr, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
+	public RewardManager(LinkedBlockingQueue<Result> result, String mcastAddr, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
 		double rewAuth, double rewCur) throws IOException {
 		
 		Common.notNull(mcastAddr, wallets, registry);
@@ -45,8 +50,7 @@ final class RewardManager extends Thread {
 		this.wallets = wallets;
 		this.registry = registry;
 		this.calculator = new RewardCalculator(rewAuth, rewCur);
-		this.packet = new DatagramPacket(NOTIFYMSG.getBytes(), NOTIFYMSG.length(), this.address, this.mcastPort);
-		this.exitCode = null;
+		this.result = result;
 	}
 	
 	
@@ -58,6 +62,7 @@ final class RewardManager extends Thread {
 			Common.allAndState(registry.open());
 			List<Action> completed = new ArrayList<>();
 			Map<String, Double> rewards;
+			DatagramPacket packet;
 			while (!this.isClosed()) {
 				if (registry.getActions(completed)) {
 					rewards = calculator.computeReward(completed);
@@ -65,20 +70,27 @@ final class RewardManager extends Thread {
 						Wallet w = wallets.get(user);
 						Common.allAndState( w.newTransaction(rewards.get(user)) );
 					}
+					packet = buildPacket();
 					socket.send(packet);
-					System.out.println("Notifying sent");
+					System.out.println("Notifying sent"); //TODO Magari un log in futuro
 				} else if (!this.isClosed()) throw new IllegalStateException();
 				completed.clear();
 			}
 			socket.leaveGroup(address);
-			this.setExitCode(EXIT_SUCCESS);
-		} catch (Exception ex) { Common.debugExc(ex); this.setExitCode(EXIT_FAILURE); }
-		finally { socket.close(); registry.close(); }
+			result.add(Result.newSuccess());
+		} catch (ConnResetException iex) { }
+		catch (IOException ioe) {}
+		catch (InterruptedException ie) {}
+		catch (Exception ex) {
+			Debug.debugExc(ex);
+			result.add(Result.newGenError());
+		} finally { socket.close(); registry.close(); }
 	}
 	
-	public RewardManager(String mcastAddr, int mcastPort, Table<String, Wallet> wallets, long rewPeriod,
-		TimeUnit rewUnit, int rwAuthPerc, int rwCurPerc) throws IOException {
-		this(mcastAddr, mcastPort, wallets, new ActionRegistry(rewPeriod, rewUnit), rwAuthPerc, rwCurPerc);
+	public RewardManager(LinkedBlockingQueue<Result> threadRes, String mcastAddr, int mcastPort,
+		Table<String, Wallet> wallets, Pair<Long, TimeUnit> pair, int rwAuthPerc, int rwCurPerc)
+		throws IOException {
+		this(threadRes, mcastAddr, mcastPort, wallets, new ActionRegistry(pair), rwAuthPerc, rwCurPerc);
 	}
 	
 	public boolean isClosed() {
@@ -89,24 +101,21 @@ final class RewardManager extends Thread {
 	
 	public void close() { synchronized (state) { state = State.CLOSED; } }
 	
-	public synchronized Integer getExitCode() { return exitCode; }
-	
-	public synchronized void setExitCode(Integer code) { exitCode = code; }
-	
+	@NotNull
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
 		sb.append(this.getClass().getSimpleName() + " [");
-		try {
-			boolean first = false;
-			Field[] fields = this.getClass().getDeclaredFields();
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + "\n" + f.getName() + " = " + f.get(this) );
-					first = true;
-				}
+		boolean first = false;
+		Field[] fields = this.getClass().getDeclaredFields();
+		Object obj;
+		for (int i = 0; i < fields.length; i++) {
+			Field f = fields[i];
+			if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
+				try {obj = f.get(this);} catch (IllegalAccessException ex) {continue;}
+				sb.append( (first ? ", " : "") + "\n" + f.getName() + " = " + obj);
+				first = true;
 			}
-		} catch (IllegalAccessException ex) { }
+		}
 		sb.append("\n]");
 		return sb.toString();		
 	}

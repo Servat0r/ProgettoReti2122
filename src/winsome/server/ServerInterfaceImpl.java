@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import winsome.common.rmi.*;
-import winsome.util.Common;
+import winsome.util.*;
 
 final class ServerInterfaceImpl extends UnicastRemoteObject implements ServerInterface {
 	
@@ -22,9 +22,10 @@ final class ServerInterfaceImpl extends UnicastRemoteObject implements ServerInt
 		this.clients = new ConcurrentHashMap<>();
 	}
 	
-	public synchronized boolean register(String username, String password, List<String> tags) throws RemoteException {
+	public synchronized Pair<Boolean, String> register(String username, String password, List<String> tags)
+		throws RemoteException {
 		Common.notNull(username, password, tags); Common.andAllArgs(tags.size() >= 1, tags.size() <= 5);
-		return this.server.registerUser(username, password, tags);
+		return this.server.register(username, password, tags);
 	}
 	
 	public boolean followersRegister(String username, ClientInterface client) throws RemoteException {
@@ -42,15 +43,17 @@ final class ServerInterfaceImpl extends UnicastRemoteObject implements ServerInt
 		return this.clients.containsKey(username);
 	}
 	
-	boolean addFollower(String follower, String followed, List<String> tags) throws RemoteException {
+	boolean addFollower(String follower, String followed, List<String> tags) throws RemoteException { //Tag di chi segue!
 		Common.notNull(follower, followed, tags);
 		ClientInterface client = this.clients.get(followed);
-		return (client != null ? client.addFollower(follower, tags) : false);
+		if (client == null) return false;
+		else { client.addFollower(follower, tags); return true; }
 	}
 	
 	boolean removeFollower(String follower, String followed) throws RemoteException {
 		Common.notNull(follower, followed);
 		ClientInterface client = this.clients.get(followed);
-		return (client != null ? client.removeFollower(follower) : false);
+		if (client == null) return false;
+		else { client.removeFollower(follower); return true; }
 	}
 }

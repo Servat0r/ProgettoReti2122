@@ -1,10 +1,10 @@
 package winsome.server.data;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.locks.*;
 
+import winsome.annotations.NotNull;
 import winsome.util.Common;
 
 public class Table<T extends Comparable<T>, V extends Indexable<T>> {
@@ -33,12 +33,12 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 		} finally { lock.writeLock().unlock(); }
 	}
 		
-	public V putIfAbsent(V elem) {
+	public boolean putIfAbsent(V elem) {
 		Common.notNull(elem);
 		T key = elem.key();
 		try {
 			lock.writeLock().lock();
-			return this.map.putIfAbsent(key, elem);
+			return (this.map.putIfAbsent(key, elem) == null);
 		} finally { lock.writeLock().unlock(); }
 	}
 	
@@ -72,10 +72,12 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 		} finally { lock.writeLock().unlock(); }
 	}
 	
+	@NotNull
 	public Set<T> keySet(){
 		try { lock.readLock().lock(); return this.map.keySet(); } finally { lock.readLock().unlock(); }
 	}
 	
+	@NotNull
 	public Collection<V> getAll(){
 		try { lock.readLock().lock(); return this.map.values(); } finally { lock.readLock().unlock(); }
 	}
@@ -91,6 +93,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	
 	public synchronized boolean isDeserialized() { return (lock != null); }
 	
+	@NotNull
 	public NavigableSet<V> get(SortedSet<T> ext) {
 		Common.notNull(ext);
 		NavigableSet<V> result = new TreeSet<>();
@@ -102,6 +105,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 		} finally { lock.readLock().unlock(); }
 	}
 	
+	@NotNull
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
 		sb.append(this.getClass().getSimpleName() + " [");
@@ -112,14 +116,15 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 			boolean first = false;
 			for (int i = 0; i < fields.length; i++) {
 				Field f = fields[i];
+				Object currObj;
 				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					sb.append( (first ? ", " : "") + newl + f.getName() + " = " + f.get(this) );
+					try { currObj = f.get(this); } catch (Exception ex) { continue; }
+					sb.append( (first ? ", " : "") + newl + f.getName() + " = " + currObj );
 					if (!first) first = true;
 				}
 			}
 			sb.append(newl + "]");
 			return sb.toString();		
-		} catch (IllegalAccessException ex) { return null; }
-		finally { lock.readLock().unlock(); }
+		} finally { lock.readLock().unlock(); }
 	}
 }
