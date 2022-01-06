@@ -1,6 +1,5 @@
 package winsome.server.action;
 
-import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
@@ -16,8 +15,8 @@ public final class ActionRegistry {
 	private static final long DFLWAIT = 1000;
 	
 	private static final Map<String, Long> convMap = Common.newHashMapFromLists(
-		Arrays.asList("DAYS", "HOURS", "MILLISECONDS", "MINUTES", "SECONDS"),
-		Arrays.asList((long)86_400_000, (long)3_600_000, (long)1, (long)60_000, (long)1000)
+		Common.toList("DAYS", "HOURS", "MILLISECONDS", "MINUTES", "SECONDS"),
+		Common.toList((long)86_400_000, (long)3_600_000, (long)1, (long)60_000, (long)1000)
 	);
 	
 	public static final Predicate<ActionRegistry> timeoutOnlyWriteWait = (reg) -> (!reg.timeoutElapsed());
@@ -44,13 +43,6 @@ public final class ActionRegistry {
 		String str = unit.toString();
 		Long val = convMap.get(str);
 		if (val != null) return period * val;
-		else throw new IllegalArgumentException();
-	}
-	
-	private long denormalize(long period, TimeUnit unit) { //milliseconds -> unit
-		String str = unit.toString();
-		Long val = convMap.get(str);
-		if (val != null) return period/val;
 		else throw new IllegalArgumentException();
 	}
 	
@@ -124,6 +116,8 @@ public final class ActionRegistry {
 			this.lock.lock();
 			if (this.state == State.OPEN) {
 				this.state = State.CLOSED;
+				readCond.signalAll();
+				writeCond.signalAll();
 				return true;
 			} else return false;
 		} finally { this.lock.unlock(); }
@@ -133,12 +127,13 @@ public final class ActionRegistry {
 		Common.notNull(a);
 		try {
 			this.lock.lock();
-			if (this.state == State.CLOSED) return false;
-			while (this.readerShouldWait()) this.readCond.await(this.wait, this.waitUnit);
+			while ((this.state != State.CLOSED) && this.readerShouldWait())
+				this.readCond.await(this.wait, this.waitUnit);
 			if (this.state == State.CLOSED) return false;
 			registry.add(a);
 			return true;
-		} finally { this.lock.unlock(); }
+		}
+		finally { this.lock.unlock(); }
 	}
 	
 	public boolean endAction(Action a) {
@@ -165,9 +160,9 @@ public final class ActionRegistry {
 		Common.notNull(l);
 		try {
 			this.lock.lock();
-			if (this.state == State.CLOSED) { l.addAll(registry); registry.clear(); return false; }
-			while (writeWaitPolicy.test(this)) this.writeCond.awaitUntil(timeout);
-			if (this.state == State.CLOSED) { l.addAll(registry); registry.clear(); return false; }
+			while ((this.state != State.CLOSED) && writeWaitPolicy.test(this)) this.writeCond.awaitUntil(timeout);
+			if (this.state == State.CLOSED) {
+				l.addAll(registry); registry.clear(); return false; }
 			Action a;
 			Iterator<Action> iter = registry.iterator();
 			while (iter.hasNext()) {
@@ -186,24 +181,8 @@ public final class ActionRegistry {
 	
 	@NotNull
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		Field[] fields = this.getClass().getDeclaredFields();
-		boolean first = false;
-		for (int i = 0; i < fields.length; i++) {
-			Field f = fields[i];
-			Object obj;
-			if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-				try {obj = f.get(this);}
-				catch (IllegalAccessException ex) {continue;}
-				String name = f.getName();
-				if ( name.equals("start") || name.equals("now") ) obj = ((long)obj) % (now + period);
-				else if (name.equals("period")) obj = this.denormalize(period, periodUnit);
-				sb.append( (first ? ", " : "") + name + " = " + obj );
-				if (!first) first = true;
-			}
-		}
-		sb.append("]");
-		return sb.toString();
+		String cname = this.getClass().getSimpleName();
+		String jsond = Serialization.GSON.toJson(this, this.getClass());
+		return String.format("%s: %s", cname, jsond);
 	}
 }

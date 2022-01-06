@@ -34,6 +34,7 @@ final class Answ {
 		//Unfollow
 		UNFOLLOW_ALREADY = "Non sei già più follower di '%s'",
 		VOTED_ALREADY = "Hai già votato questo post",
+		REWON_ALREADY = "Hai già fatto il rewin di questo post",
 		INV_VOTE_SYNTAX = "Sintassi del voto non valida: usa '+1' per like e '-1' per dislike",
 		BTC_CONV = "Errore durante la conversione del portafoglio in bitcoin";
 }

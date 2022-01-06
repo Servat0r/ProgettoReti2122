@@ -3,8 +3,6 @@ package winsome.server;
 import java.util.*;
 import java.util.concurrent.*;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.net.*;
 
 import winsome.server.data.*;
@@ -18,7 +16,7 @@ final class RewardManager extends Thread {
 	private static final String NOTIFYMSG = "New reward @ ";
 	private static enum State { INIT, OPEN, CLOSED; };
 	
-	private LinkedBlockingQueue<Result> result;
+	private WinsomeServer server;
 	private int mcastPort;
 	private MulticastSocket socket;
 	private InetAddress address;
@@ -38,27 +36,36 @@ final class RewardManager extends Thread {
 	 * 1. Crea il socket di multicast e invia le notifiche lì
 	 * 2. Aggiorna i portafogli degli utenti.
 	 */
-	public RewardManager(LinkedBlockingQueue<Result> result, String mcastAddr, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
+	public RewardManager(WinsomeServer server, String mcastAddr, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
 		double rewAuth, double rewCur) throws IOException {
 		
-		Common.notNull(mcastAddr, wallets, registry);
+		Common.notNull(server, mcastAddr, wallets, registry);
 		Common.andAllArgs(mcastPort >= 0, rewAuth >= 0.0, rewCur >= 0, rewAuth + rewCur == TOTREWPERC);
 		socket = new MulticastSocket(mcastPort);
 		address = InetAddress.getByName(mcastAddr);
 		state = State.INIT;
+		this.server = server;
 		this.mcastPort = mcastPort;
 		this.wallets = wallets;
 		this.registry = registry;
 		this.calculator = new RewardCalculator(rewAuth, rewCur);
-		this.result = result;
 	}
 	
 	
-	@SuppressWarnings("deprecation")
 	public void run() {
+		server.log("RewardManager service started");
+		int time = 1;
 		try {
 			state = State.OPEN;
-			socket.joinGroup(address);
+			NetworkInterface net = null;
+			try { net = NetworkInterface.getByInetAddress(address); }	
+			catch (SocketException se) {
+				se.printStackTrace();
+				WinsomeServer.getServer().signalIllegalState(se);
+				return;
+			}
+			InetSocketAddress mcastaddr = new InetSocketAddress(address, mcastPort);
+			socket.joinGroup(mcastaddr, net);
 			Common.allAndState(registry.open());
 			List<Action> completed = new ArrayList<>();
 			Map<String, Double> rewards;
@@ -72,51 +79,29 @@ final class RewardManager extends Thread {
 					}
 					packet = buildPacket();
 					socket.send(packet);
-					System.out.println("Notifying sent"); //TODO Magari un log in futuro
+					server.log("Reward update notify sent (#%d time)", time);
+					time++;
 				} else if (!this.isClosed()) throw new IllegalStateException();
 				completed.clear();
 			}
-			socket.leaveGroup(address);
-			result.add(Result.newSuccess());
-		} catch (ConnResetException iex) { }
-		catch (IOException ioe) {}
-		catch (InterruptedException ie) {}
-		catch (Exception ex) {
-			Debug.debugExc(ex);
-			result.add(Result.newGenError());
-		} finally { socket.close(); registry.close(); }
+			socket.leaveGroup(mcastaddr, net);
+		} catch (Exception ex) {
+			server.logStackTrace(ex);
+			if (ex.getClass().equals(IllegalStateException.class)) server.signalIllegalState(ex);
+		} finally { socket.close(); registry.close(); server.log("RewardManager service ended"); }
 	}
 	
-	public RewardManager(LinkedBlockingQueue<Result> threadRes, String mcastAddr, int mcastPort,
+	public RewardManager(WinsomeServer server, String mcastAddr, int mcastPort,
 		Table<String, Wallet> wallets, Pair<Long, TimeUnit> pair, int rwAuthPerc, int rwCurPerc)
 		throws IOException {
-		this(threadRes, mcastAddr, mcastPort, wallets, new ActionRegistry(pair), rwAuthPerc, rwCurPerc);
+		this(server, mcastAddr, mcastPort, wallets, new ActionRegistry(pair), rwAuthPerc, rwCurPerc);
 	}
 	
-	public boolean isClosed() {
-		boolean res;
-		synchronized (state) { res = (state == State.CLOSED); }
-		return res;
-	}
-	
-	public void close() { synchronized (state) { state = State.CLOSED; } }
+	public boolean isClosed() { synchronized (state) { return (state == State.CLOSED); } }
 	
 	@NotNull
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		boolean first = false;
-		Field[] fields = this.getClass().getDeclaredFields();
-		Object obj;
-		for (int i = 0; i < fields.length; i++) {
-			Field f = fields[i];
-			if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-				try {obj = f.get(this);} catch (IllegalAccessException ex) {continue;}
-				sb.append( (first ? ", " : "") + "\n" + f.getName() + " = " + obj);
-				first = true;
-			}
-		}
-		sb.append("\n]");
-		return sb.toString();		
+		String jsond = Serialization.GSON.toJson(this, RewardManager.class);
+		return String.format("%s: %s", this.getClass().getSimpleName(), jsond);
 	}
 }

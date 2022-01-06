@@ -26,22 +26,22 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	
 	//TODO These fields are immutable and can be accessed without synchronization
 	private final long idPost;
-	private final String title;
-	private final String content;
-	private final String author;
+	private final String title, content, author;
 
 	//TODO This field is mutable but is accessed only by get and set methods and thus they can be sync'd privately
 	private double value;
 	private transient ReentrantLock valLock;
 	
 	//TODO These fields should be accessed in read/write mode
-	private final NavigableSet<String> likes;
-	private final NavigableSet<String> dislikes;
+	private final NavigableMap<String, Boolean> votes;
 	private transient ReentrantReadWriteLock voteLock;
 	
 	//TODO This field should be accessed in read/write mode (with specific operations)
 	private final Map<String, SortedSet<Comment>> comments;
 	private transient ReentrantReadWriteLock commentLock;
+	
+	//TODO
+	private NavigableSet<String> rewinners;
 	
 	public synchronized static void setGen(IDGen gen) {	if (Post.gen == null) Post.gen = gen; }
 	
@@ -63,11 +63,11 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		this.value = 0.0;
 		this.valLock = new ReentrantLock();
 		this.author = author.key();
-		this.likes = new TreeSet<>();
-		this.dislikes = new TreeSet<>();
+		this.votes = new TreeMap<>();
 		this.voteLock = new ReentrantReadWriteLock();
 		this.comments = new HashMap<>();
 		this.commentLock = new ReentrantReadWriteLock();
+		this.rewinners = new TreeSet<>();
 	}
 	
 	//TODO No sync need
@@ -111,8 +111,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		Common.notNull(user);
 		try{
 			voteLock.writeLock().lock();
-			NavigableSet<String> voteSet = (like ? likes : dislikes);
-			return voteSet.add(user);
+			return (this.votes.putIfAbsent(user, like) == null);
 		} finally { voteLock.writeLock().unlock(); }
 	}
 	
@@ -145,8 +144,9 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		
 		try {
 			voteLock.readLock().lock();
-			votes[0] = likes.size();
-			votes[1] = dislikes.size();
+			for (String user : this.votes.keySet()) {
+				votes[this.votes.get(user) ? 0 : 1]++;
+			}
 		} finally { voteLock.readLock().unlock(); }
 		
 		List<String> result = 
@@ -160,6 +160,12 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		} finally { commentLock.readLock().unlock(); }
 		
 		return result;
+	}
+	
+	
+	public boolean rewin(String user) {
+		String copy = new String(user);
+		return this.rewinners.add(copy);
 	}
 	
 	@NotNull

@@ -1,5 +1,7 @@
 package winsome.server;
 
+import java.util.Map;
+
 import winsome.common.config.ConfigParser;
 import winsome.util.*;
 
@@ -9,18 +11,28 @@ final class WinsomeServerMain {
 	
 	public static void main(String[] args) {
 		Debug.setDebug();
-		Debug.setDbgStream("serverDebug.txt");
+		Debug.setDbgStream("server.dbg");
 		int exitCode = 0;
 		WinsomeServer server = null;
+		Thread t = null;
+		Pair<Boolean, String> result = new Pair<>(false, "Error during execution");
 		try {
-			server = WinsomeServer.newServer(ConfigParser.parseFile(CONFIG, ConfigParser.LOWER));
-			Pair<Boolean, String> result = server.mainloop();
-			exitCode = (result.getKey() ? 0 : 1);
-			if (exitCode == 0) System.out.println(result.getValue());
-			else System.err.println(result.getValue());
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-			exitCode = 1;
-		} finally { Debug.exit(exitCode); }
+			Map<String, String> configMap = ConfigParser.parseFile(CONFIG, ConfigParser.LOWER);
+			if (WinsomeServer.createServer(configMap) && (server = WinsomeServer.getServer()) != null) {
+				t = new Thread(new CtrlCHandler(server));
+				t.setName(CtrlCHandler.DFLNAME);
+				Runtime.getRuntime().addShutdownHook(t);
+				result = server.mainloop();
+				exitCode = (result.getKey() ? 0 : 1);
+			} else exitCode = 1;
+		} catch (Exception ex) { Debug.debugExc(ex); exitCode = 1; }
+		finally {
+			try { t.join(); } catch (Exception ex) { Debug.debugExc(ex); }
+			finally {
+				System.out.println(result.getValue());
+				System.out.printf("Main exiting with code %d%n", exitCode);
+				Debug.exit(exitCode);
+			}
+		}
 	}
 }

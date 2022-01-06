@@ -1,10 +1,6 @@
 package winsome.server.action;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.Date;
-
-import winsome.util.Common;
+import winsome.util.*;
 
 public final class Action {
 
@@ -20,49 +16,62 @@ public final class Action {
 	private String actor;
 	private long idPost;
 	private String author;
-	private Integer ncomments; //Numero totale di commenti al post
-	private Long endTime;
+	private int ncomments; //Numero totale di commenti al post
+	private long endTime;
 	
-	private Action(ActionType type, String username, long idPost, Integer nComments) {
-		Common.notNull(type, username);
-		Common.andAllArgs(idPost >= 0);
+	private Action(ActionType type, String actor, String author, long idPost, int nComments) {
+		Common.notNull(type, actor);
+		Common.andAllArgs(idPost >= 0, nComments >= 0);
 		this.type = type;
-		this.actor = username;
+		this.actor = actor;
+		this.author = author;
 		this.idPost = idPost;
 		this.ncomments = nComments;
-		this.endTime = null;
+		this.endTime = -1;
+	}
+	
+	private Action(ActionType type, String actor, long idPost, int nComments)
+	{ this(type, actor, null, idPost, nComments); }
+		
+	private Action(ActionType type, String actor, long idPost) { this(type, actor, null, idPost, 0); }
+	
+	public synchronized void setIdPost(long idPost) {
+		Common.andAllArgs(idPost > 0);
+		if (this.idPost <= 0) this.idPost = idPost;
+	}
+	
+	public synchronized void setNComments(int nComments) {
+		Common.andAllArgs(nComments >= 0);
+		this.ncomments = nComments;
+	}
+	
+	public synchronized void setAuthor(String author) {
+		Common.notNull(author);
+		this.author = author;
+	}
+	
+	public static Action newCreatePost(String username) {
+		return new Action(ActionType.CREATE, username, username, 0, 0);
+	}
+	
+	public static Action newDeletePost(String username, long idPost) {
+		return new Action(ActionType.DELETE, username, username, idPost, 0);
+	}
+	
+	public static Action newRatePost(boolean like, String actor, String author, long idPost) {
+		ActionType type = (like ? ActionType.LIKE : ActionType.DISLIKE);
+		return new Action(type, actor, author, idPost, 0);
 	}
 		
-	public void setIdPost(long idPost) {
-		Common.andAllArgs(idPost > 0);
-		if (this.idPost < 0) this.idPost = idPost;
-	}
-	
-	public static Action newCreate(String username) {
-		return new Action(ActionType.CREATE, username, 0, null);
-	}
-	
-	public static Action newDelete(String username, long idPost) {
-		return new Action(ActionType.DELETE, username, idPost, null);
-	}
-	
-	public static Action newLike(String username, long idPost) {
-		return new Action(ActionType.LIKE, username, idPost, null);
-	}
-	
-	public static Action newDislike(String username, long idPost) {
-		return new Action(ActionType.DISLIKE, username, idPost, null);		
-	}
-	
-	public static Action newComment(String username, long idPost, Integer nComments) {
-		return new Action(ActionType.COMMENT, username, idPost, nComments);
+	public static Action newAddComment(String actor, String author, long idPost) {
+		return new Action(ActionType.COMMENT, actor, author, idPost, 0);
 	}
 	
 	public synchronized final void markEnded() {
-		if (endTime == null) { endTime = Long.valueOf(System.currentTimeMillis()); }
+		if (endTime < 0) { endTime = Long.valueOf(System.currentTimeMillis()); }
 	}
 	
-	public synchronized final boolean isEnded() { return (endTime != null); }
+	public synchronized final boolean isEnded() { return (endTime >= 0); }
 	
 	public final ActionType getType() {return type;}
 	public final String getActor() {return new String(actor);}
@@ -72,22 +81,8 @@ public final class Action {
 	public final Integer getNComments() {return ncomments;}
 	
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		try {
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					Object obj = f.get(this);
-					if (f.getName().contains("Time")) obj = new Date((long)obj);
-					sb.append( (first ? ", " : "") + f.getName() + " = " + obj );
-					if (!first) first = true;
-				}
-			}
-		} catch (IllegalAccessException ex) { return null; }
-		sb.append("]");
-		return sb.toString();		
-	}	
+		String jsond = Serialization.GSON.toJson(this, Action.class);
+		String cname = this.getClass().getSimpleName();
+		return String.format("%s: %s", cname, jsond);
+	}
 }

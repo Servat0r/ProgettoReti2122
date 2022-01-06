@@ -11,15 +11,16 @@ import winsome.util.*;
 
 /*
  * messaggio scambiato su tcp = {
- *   1 byte per idCode
- *   1 byte per paramCode
+ *   4 byte per lunghezza resto messaggio
+ *   4 byte per idCode
+ *   4 byte per paramCode
  *   4 byte per argN
  *   per ogni argomento {
  *     4 byte di lunghezza della stringa
  *     bytes della stringa
  *   }
  * }
- * length(msg) = 6 + 4 * msg.argN + Sum_(i=0..(argN-1))(length(arguments[i]))
+ * length(msg) = (4 +) 12 + 4 * msg.argN + Sum_(i=0..(argN-1))(length(arguments[i]))
  */
 
 public final class Message {
@@ -64,12 +65,12 @@ public final class Message {
 		BTC = "btc",
 		CMD = "cmd";
 	
-	public static final List<String> COMMANDS = Arrays.asList(
+	public static final List<String> COMMANDS = Common.toList(
 		OK, ERR, FWLIST, MCAST, REG, LOGIN, LOGOUT, LIST, FOLLOW, UNFOLLOW, BLOG, POST, SHOW,
 		DELETE, REWIN, RATE, COMMENT, WALLET, HELP, QUIT, EXIT
 	);
 	
-	private static final List<String> emptyList = Arrays.asList(EMPTY);
+	private static final List<String> emptyList = Common.toList(EMPTY);
 	
 	public static final Map<String, List<String>> CODES = Common.newHashMapFromLists(
 		COMMANDS,

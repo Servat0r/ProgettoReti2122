@@ -1,9 +1,13 @@
 .settings/
 bin/
+other/
 .classpath
 .project
 note.txt
-*.dbg
+input.txt
 src/other/
 src/winsome/other/
+*.dbg
 *.json
+*.log
+*.sh

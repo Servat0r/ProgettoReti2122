@@ -20,7 +20,7 @@ public final class ActionTestMain {
 		public void run() {
 			String name = Thread.currentThread().getName();
 			Common.println(name + " started @ " + new Date());
-			Action a = Action.newLike("user", gen.nextId());
+			Action a = Action.newRatePost(true, "user", "user", gen.nextId());
 			try { Thread.sleep(conv * timeout); registry.putAction(a); }
 			catch (Exception e) { e.printStackTrace(); }
 			Common.println(name + " ended @ " + new Date());

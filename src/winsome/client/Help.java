@@ -9,7 +9,7 @@ final class Help {
 	private Help() {}
 
 	@SafeVarargs
-	private static <T> List<T> list(T... args){ return Arrays.asList(args); }
+	private static <T> List<T> list(T... args){ return Common.toList(args); }
 	
 	private static <K,V> Map<K, V> newMap(List<K> keys, List<V> vals){ return Common.newHashMapFromLists(keys, vals); }
 	

@@ -24,8 +24,10 @@ REGPORT		=	7777
 TIMEOUT		=	100000
 
 # Input
-#INPUT		=	pippo.txt
+INPUT		=	input.txt
 
 # TODO
 # title.length <= 20
 # content.length <= 500
+# Like + dislike della stessa persona, like dell'autore da correggere!
+# Controllare il doppio rewin

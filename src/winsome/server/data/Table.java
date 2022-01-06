@@ -1,25 +1,27 @@
 package winsome.server.data;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.locks.*;
 
+import com.google.gson.reflect.TypeToken;
+
 import winsome.annotations.NotNull;
 import winsome.util.Common;
+import winsome.util.Serialization;
 
 public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	
 	private final NavigableMap<T, V> map;
-	private transient ReentrantReadWriteLock lock;
-	private boolean prettyStrPrint;
+	private transient ReentrantReadWriteLock lock = null;
+	private transient Type type = null;
 	
-	public Table(boolean prettyStrPrint) {
+	public Table() {
 		this.map = new TreeMap<>();
 		this.lock = new ReentrantReadWriteLock();
-		this.prettyStrPrint = prettyStrPrint;
+		this.type = new TypeToken<Table<T,V>>(){}.getType();
 	}
 	
-	public Table() { this(false); }
 	
 	public V put(V elem) {
 		Common.notNull(elem);
@@ -89,42 +91,35 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	
 	public synchronized void deserialize() throws DeserializationException {
 		if (lock == null) lock = new ReentrantReadWriteLock();
+		if (type == null) type = new TypeToken<Table<T,V>>(){}.getType();
 	}
 	
-	public synchronized boolean isDeserialized() { return (lock != null); }
+	public synchronized boolean isDeserialized() { return (lock != null && type != null); }
 	
 	@NotNull
-	public NavigableSet<V> get(SortedSet<T> ext) {
+	public NavigableSet<V> get(SortedSet<T> ext, boolean retain) {
 		Common.notNull(ext);
 		NavigableSet<V> result = new TreeSet<>();
+		SortedSet<T> set;
 		try {
 			lock.readLock().lock();
-			ext.retainAll(map.keySet());
-			for (T key : ext) result.add(map.get(key));
+			if (retain) set = ext;
+			else { set = new TreeSet<>(); set.addAll(ext); }
+			set.retainAll(map.keySet());
+			for (T key : set) result.add(map.get(key));
 			return result;
 		} finally { lock.readLock().unlock(); }
 	}
 	
 	@NotNull
+	public NavigableSet<V> get(SortedSet<T> ext){ return this.get(ext, true); }
+	
+	@NotNull
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		String newl = (prettyStrPrint ? "\n" : "");
 		try {
-			lock.readLock().lock();
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				Object currObj;
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					try { currObj = f.get(this); } catch (Exception ex) { continue; }
-					sb.append( (first ? ", " : "") + newl + f.getName() + " = " + currObj );
-					if (!first) first = true;
-				}
-			}
-			sb.append(newl + "]");
-			return sb.toString();		
-		} finally { lock.readLock().unlock(); }
+			if (lock != null) lock.readLock().lock();
+			String jsond = Serialization.GSON.toJson(this);
+			return String.format("%s : %s", this.getClass().getSimpleName(), jsond);
+		} finally { if (lock != null) lock.readLock().unlock(); }
 	}
 }

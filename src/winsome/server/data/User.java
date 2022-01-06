@@ -51,8 +51,9 @@ public final class User implements Indexable<String>, Comparable<User> {
 			User umin = min(follower, followed), umax = max(follower, followed);
 			synchronized (umin) {
 				synchronized (umax) {
-					if (! follower.following.add(followed) ) return -1;
-					if (! followed.followers.add(follower) ) return -1;
+					String u1 = follower.key(), u2 = followed.key();
+					if (! follower.following.add(new String(u2)) ) return -1;
+					if (! followed.followers.add(new String(u1)) ) return -1;
 				}
 			}
 		}
@@ -79,11 +80,12 @@ public final class User implements Indexable<String>, Comparable<User> {
 	public static User newUser(String username, String password, Table<String, User> users, Table<Long, Post> posts,
 			Table<String, Wallet> wallets, List<String> tags) throws IllegalStateException {
 		if (users.contains(username)) return null;
-		User user = new User(username, password, posts, wallets, tags);
+		User user = new User(username, password, users, posts, wallets, tags);
 		return user;
 	}
 	
-	private User(String username, String password, Table<Long, Post> posts, Table<String, Wallet> wallets, List<String> tags) {
+	private User(String username, String password, Table<String, User> users, Table<Long, Post> posts,
+		Table<String, Wallet> wallets, List<String> tags) {
 		Common.notNull(username, password, posts, wallets, tags);
 		Common.andAllArgs(username.length() > 0, password.length() > 0, tags.size() >= 1, tags.size() <= 5);
 		
@@ -101,22 +103,20 @@ public final class User implements Indexable<String>, Comparable<User> {
 		if (!wallets.putIfAbsent(wallet)) throw new IllegalStateException();
 		
 		this.tags = tags;
-		this.followers = new Index<>();
-		this.following = new Index<>();
-		this.blog = new Index<>();
+		this.followers = new Index<>(users);
+		this.following = new Index<>(users);
+		this.blog = new Index<>(posts);
 		this.posts = posts;
 	}
 		
 	public synchronized void deserialize(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
 		throws DeserializationException {
 		Common.notNull(users, posts, wallets);
-		Debug.println(username);
-		if (this.isDeserialized()) { Debug.println("Napalm 51"); return; }
+		if (this.isDeserialized()) return;
 		if (!users.isDeserialized() || !posts.isDeserialized() || !wallets.isDeserialized())
 			throw new DeserializationException();
 		following.deserialize(users); followers.deserialize(users);
 		if (this.posts == null) this.posts = posts; else this.posts.deserialize();
-		Debug.println(username);
 		blog.deserialize(this.posts);
 		if (this.wallet == null) this.wallet = wallets.get(username);
 		this.wallet.deserialize();
@@ -162,9 +162,7 @@ public final class User implements Indexable<String>, Comparable<User> {
 		
 	@NotNull
 	public List<String> getBlog() { //blog
-		Debug.println(this.blog);
 		List<Post> posts = this.blog.getAll();
-		Debug.println(posts);
 		List<String> result = new ArrayList<>();
 		for (Post p : posts) result.add(p.getPostInfo());
 		return result;
@@ -200,10 +198,9 @@ public final class User implements Indexable<String>, Comparable<User> {
 	}
 	
 	public long createPost(String title, String content) { //post <title> <content>
-		Debug.println("Title = %s, content = %s", title, content);
 		Post p = new Post(title, content, this);
 		if (!this.posts.putIfAbsent(p)) return -1;
-		if (!this.blog.add(p)) {
+		if (!this.blog.add(p.key())) {
 			if (this.posts.remove(p.key()) == null) throw new IllegalStateException();
 			return -1;
 		}
@@ -230,13 +227,16 @@ public final class User implements Indexable<String>, Comparable<User> {
 		Common.andAllArgs(idPost > 0);
 		Post p = null;
 		if ((p = this.feedSearch(idPost)) == null) throw new DataException(DataException.NOT_IN_FEED);
-		return this.blog.add(p);
+		boolean b1 = this.blog.add(p.key()), b2 = p.rewin(this.key());
+		if (b1 && b2) return true;
+		else if (!b1 && !b2) return false;
+		else throw new DataException(DataException.UNREWIN_POST);
 	}
 	
 	//TODO Il valore in bitcoin viene calcolato dal server (aggiunto in cima alla lista qui ritornata)
 	@NotNull
 	public List<String> getWallet() {
-		List<String> result = Arrays.asList( Double.toString(this.wallet().value()) );
+		List<String> result = Common.toList( Double.toString(this.wallet().value()) );
 		result.addAll(this.wallet().history());
 		return result;
 	}

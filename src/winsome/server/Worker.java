@@ -1,8 +1,8 @@
 package winsome.server;
 
-import java.io.IOException;
 import java.nio.channels.*;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 import winsome.common.msg.*;
 import winsome.util.*;
@@ -12,25 +12,29 @@ final class Worker implements Runnable {
 	
 	private final SelectionKey skey;
 	private final SocketChannel client;
-	private final WinsomeServer server;
 	private Message msg;
 	private MessageBuffer buf;
+	private BiConsumer<SelectionKey, Exception> excHandler;
 	
-	public Worker(SelectionKey skey, WinsomeServer server) {
-		Common.notNull(skey, server);
+	public Worker(SelectionKey skey, BiConsumer<SelectionKey, Exception> excHandler) {
+		Common.notNull(skey, excHandler);
 		this.skey = skey;
 		this.client = (SocketChannel)this.skey.channel();
-		this.server = server;
 		this.msg = null;
-		this.buf = new MessageBuffer(server.bufferCap());
+		this.buf = null;
+		this.excHandler = excHandler;
 	}
 	
+	public Worker(SelectionKey skey) { this(skey, WinsomeServer.DFLEXCHANDLER); }
+	
 	public void run() {
+		WinsomeServer server = WinsomeServer.getServer();
+		if (server == null) return;
 		try {
 			String id = null, param = null;
+			this.buf = new MessageBuffer(server.bufferCap());
 			try {
 				msg = Message.recvFromChannel(client, buf);
-				Debug.println(msg);
 				id = msg.getIdStr();
 				param = msg.getParamStr(); //Cannot throw MessageException
 				String u = server.translateChannel(client);
@@ -47,7 +51,7 @@ final class Worker implements Runnable {
 				case Message.LIST : {
 					switch (param) {
 						case Message.FOLLOWING : {msg = server.listFollowing(skey); break;}
-						case Message.USERS : {msg = server.listUsers(skey); Debug.println(msg); break;}
+						case Message.USERS : {msg = server.listUsers(skey); break;}
 						default : break;
 					};
 					break;
@@ -79,13 +83,12 @@ final class Worker implements Runnable {
 				default : break;
 			}
 			if (msg == null) msg = Message.newError(Message.UNKNOWN_MSG);
-			Debug.println( String.format("Risultato finale: %s", msg.toString()) );
 			skey.attach(msg);
 			skey.interestOps(SelectionKey.OP_WRITE);
 			server.selector().wakeup();
+		} catch (Exception ex) {
+			server.logStackTrace(ex);
+			excHandler.accept(skey, ex);
 		}
-		catch (IOException ioe) { server.closeConnection(skey); }
-		catch (IllegalArgumentException illarg) { }
-		finally { Debug.println("Finally clause"); }
 	}
 }

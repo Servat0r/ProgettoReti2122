@@ -10,23 +10,23 @@ import winsome.util.Common;
 public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		
 	private final NavigableSet<T> keys; //TODO Mutable
-	private transient Map<T, V> map;
+	private transient Table<T, V> table;
 	private transient ReentrantReadWriteLock lock;
 	
-	public Index() {
+	public Index(Table<T,V> table) {
+		Common.notNull(table);
 		this.keys = new TreeSet<>();
-		this.map = new TreeMap<>();
+		this.table = table;
 		this.lock = new ReentrantReadWriteLock();
 	}
 
-	public synchronized boolean isDeserialized() { return (map != null && lock != null); }
+	public synchronized boolean isDeserialized() { return (table != null && lock != null); }
 	
-	public synchronized void deserialize(Table<T, V> src) throws DeserializationException {
-		Common.notNull(src);
-		if (!src.isDeserialized()) throw new DeserializationException();
-		if (this.map == null) this.map = new TreeMap<>();
-		Set<V> vals = src.get(keys);
-		for (V val : vals) this.map.put(val.key(), val);
+	public synchronized void deserialize(Table<T, V> table) throws DeserializationException {
+		Common.notNull(table);
+		if (!table.isDeserialized()) throw new DeserializationException();
+		if (this.table == null) this.table = table;
+		this.keys.retainAll(table.keySet());
 		if (lock == null) lock = new ReentrantReadWriteLock();
 	}
 	
@@ -34,17 +34,15 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		Common.notNull(key);
 		try {
 			lock.readLock().lock();
-			return (keys.contains(key) ? this.map.get(key) : null);
+			return (keys.contains(key) ? this.table.get(key) : null);
 		} finally { lock.readLock().unlock(); }
 	}
 		
-	public boolean add(V val) {
-		Common.notNull(val);
+	public boolean add(T key) {
+		Common.notNull(key);
 		try {
 			lock.writeLock().lock();
-			T key = val.key();
-			boolean b = this.keys.add(key);
-			return (b ? (this.map.putIfAbsent(val.key(), val) == null) : b);
+			return this.keys.add(key);
 		} finally { lock.writeLock().unlock(); }
 	}
 	
@@ -57,8 +55,7 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		Common.notNull(key);
 		try {
 			lock.writeLock().lock();
-			boolean b = this.keys.remove(key);
-			return (b ? (this.map.remove(key) != null) : b); 
+			return this.keys.remove(key);
 		} finally {lock.writeLock().unlock();}
 	}
 	
@@ -67,10 +64,11 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		List<V> result = new ArrayList<>();
 		try {
 			lock.readLock().lock();
-			for (V val : this.map.values()) result.add(val);
+			result.addAll(this.table.get(keys));
 			return result;
 		} finally { lock.readLock().unlock(); }
 	}
+	
 	
 	@NotNull
 	public NavigableSet<T> keySet(){

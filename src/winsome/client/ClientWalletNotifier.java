@@ -1,10 +1,10 @@
 package winsome.client;
 
-import winsome.util.Common;
-import winsome.util.Debug;
+import winsome.util.*;
 
 import java.io.*;
 import java.net.*;
+import java.util.*;
 
 final class ClientWalletNotifier extends Thread implements Closeable {
 
@@ -12,6 +12,7 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 	private MulticastSocket socket;
 	private final PrintStream out, err;
 	private byte[] buffer;
+	private List<String> notifies;
 	
 	public ClientWalletNotifier(WinsomeClient client, int port, String mcastAddr, int msgLen) throws IOException {
 		Common.notNull(client, mcastAddr); Common.andAllArgs(port >= 0, msgLen > 0);
@@ -24,35 +25,34 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 		}
 		this.socket = new MulticastSocket(port);
 		this.buffer = new byte[msgLen];
+		this.notifies = client.walletNotifyingList();
 	}
 	
-	@SuppressWarnings("deprecation")
 	public void run() {
 		boolean grouped = false;
 		String prefix = this.getClass().getSimpleName() + ": ";
-		/* 
-		 * InetSocketAddress addr = new InetSocketAddress(mcastIP, socket.getLocalPort());
-		 * NetworkInterface net = NetworkInterface.getByInetAddress(mcastIP);
-		 */
+		InetSocketAddress addr = new InetSocketAddress(mcastIP, socket.getLocalPort());
+		NetworkInterface net = null;
+		
+		try { net = NetworkInterface.getByInetAddress(mcastIP); }
+		catch (SocketException se) { se.printStackTrace(); return; }
 		try {
-			this.socket.joinGroup(mcastIP);
-			/* this.socket.joinGroup(addr, net); */
+			this.socket.joinGroup(addr, net);
 			grouped = true;
 			this.out.println(prefix + "Wallet notifying service started");
 			while (true) {
 				DatagramPacket packet = new DatagramPacket(this.buffer, this.buffer.length);
 				this.socket.receive(packet);
-				this.out.println( new String(packet.getData()) );
+				this.notifies.add( new String(packet.getData()) );
 			}
 		} catch (IOException e) {
 			if (grouped) {
-				try { if (!socket.isClosed()) socket.leaveGroup(mcastIP); }
-				/* this.socket.leaveGroup(addr, net); */
+				try { if (!socket.isClosed()) socket.leaveGroup(addr, net); }
 				catch (IOException e1) { e1.printStackTrace(out); }
 				finally { out.println(prefix + "Wallet notifying service ended"); }
 			} else {
-				String addr = new String(mcastIP.getAddress());
-				this.err.printf(prefix + "Error: could not join multicast group at '%s'!%n", addr);
+				String msg = new String(mcastIP.getAddress());
+				this.err.printf(prefix + "Error: could not join multicast group at '%s'!%n", msg);
 			}
 		}
 	}

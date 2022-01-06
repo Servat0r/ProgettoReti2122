@@ -32,10 +32,10 @@ USERJSON	=	users.json
 POSTJSON	=	posts.json
 
 # Periodo di calcolo ricompense
-RWPERIOD	=	2
+RWPERIOD	=	10
 
 # TimeUnit per il periodo di calcolo ricompense
-RWPERIODUNIT	=	MINUTES
+RWPERIODUNIT	=	SECONDS
 
 # Percentuale ricompensa autore (0-100)
 RWAUTHPERC	=	70
@@ -54,3 +54,6 @@ KEEPALIVETIME	=	-1
 
 # Capacità dei ByteBuffer generati per lo scambio messaggi fra client(s) e server (se < 0, settato automaticamente a 4096)
 BUFFERCAP	=	-1
+
+# Stream di log del server (se assente, viene usato System.out)
+LOGGER		=	server.log

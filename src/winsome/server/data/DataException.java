@@ -18,7 +18,8 @@ public final class DataException extends Exception {
 	public static final String
 		UNRETRIEVE_HISTORY = "Unable to retrieve wallet history",
 		UNRETRIEVE_COMMENTS = "Unable to retrieve post comments",
-		UNADD_COMMENT = "Unable to add comment";
+		UNADD_COMMENT = "Unable to add comment",
+		UNREWIN_POST = "Unable to rewin post";
 	
 	public static final String
 		INV_VOTE = "Invalid vote";

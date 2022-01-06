@@ -9,7 +9,7 @@ final class WinsomeClientMain {
 	
 	public static void main(String[] args) {
 		Debug.setDebug();
-		//Debug.setDbgStream("clientDebug.txt");
+		//Debug.setDbgStream("client.dbg");
 		WinsomeClient client = null;
 		int exitCode = 0;
 		try {

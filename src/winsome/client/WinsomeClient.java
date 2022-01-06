@@ -46,6 +46,7 @@ public final class WinsomeClient implements AutoCloseable {
 	private OutputStream tcpOut = null;
 	
 	private ClientWalletNotifier mcastThread = null;
+	private List<String> walletNotifies = null;
 	
 	private String regHost = null;
 	private int regPort = 0;
@@ -383,6 +384,8 @@ public final class WinsomeClient implements AutoCloseable {
 		
 		this.out.println(clHandler);
 		
+		this.walletNotifies = new ArrayList<>();
+		
 		this.tcpSocket = new Socket(this.serverHost, this.tcpPort);
 		this.tcpIn = this.tcpSocket.getInputStream();
 		this.tcpOut = this.tcpSocket.getOutputStream();
@@ -393,6 +396,8 @@ public final class WinsomeClient implements AutoCloseable {
 	}
 	
 	public WinsomeClient() throws FileNotFoundException, RemoteException, NotBoundException, IOException { this(null); }
+	
+	public final List<String> walletNotifyingList() { return this.walletNotifies; }
 	
 	public final String getHost() { return this.serverHost; }
 
@@ -433,7 +438,7 @@ public final class WinsomeClient implements AutoCloseable {
 	public boolean login(String username, String password) throws IOException {
 		Common.notNull(username, password);
 		try {
-			Message msg = new Message(Message.LOGIN, Message.EMPTY, Arrays.asList(username, password) );
+			Message msg = new Message(Message.LOGIN, Message.EMPTY, Common.toList(username, password) );
 			if ( !msg.sendToStream(tcpOut) ) return this.printError(CLOSED);
 			
 			msg = Message.recvFromStream(tcpIn);
@@ -476,7 +481,7 @@ public final class WinsomeClient implements AutoCloseable {
 	public boolean logout(String username) throws IOException {
 		Common.notNull(username);
 		try {
-			Message msg = new Message(Message.LOGOUT, Message.EMPTY, Arrays.asList(username));
+			Message msg = new Message(Message.LOGOUT, Message.EMPTY, Common.toList(username));
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			
 			if ((msg = Message.recvFromStream(tcpIn)) == null) return this.printError(CLOSED);
@@ -560,12 +565,12 @@ public final class WinsomeClient implements AutoCloseable {
 	
 	public boolean followUser(String idUser) throws IOException {
 		Common.notNull(idUser);
-		return this.simpleRequest(Message.FOLLOW, Message.EMPTY, Arrays.asList(idUser));
+		return this.simpleRequest(Message.FOLLOW, Message.EMPTY, Common.toList(idUser));
 	}
 	
 	public boolean unfollowUser(String idUser) throws IOException {
 		Common.notNull(idUser);
-		return this.simpleRequest(Message.UNFOLLOW, Message.EMPTY, Arrays.asList(idUser));
+		return this.simpleRequest(Message.UNFOLLOW, Message.EMPTY, Common.toList(idUser));
 	}
 	
 	public boolean viewBlog() throws IOException { 
@@ -598,7 +603,7 @@ public final class WinsomeClient implements AutoCloseable {
 		Common.notNull(title, content);
 		title = title.substring(1, title.length()-1);
 		content = content.substring(1, content.length()-1);
-		return this.simpleRequest(Message.POST, null, Arrays.asList(title, content));
+		return this.simpleRequest(Message.POST, null, Common.toList(title, content));
 	}
 	
 	public boolean showFeed() throws IOException {
@@ -626,7 +631,7 @@ public final class WinsomeClient implements AutoCloseable {
 	public boolean showPost(long idPost) throws IOException {
 		Common.andAllArgs(idPost >= 0);
 		try {
-			Message msg = new Message( Message.SHOW, Message.POST, Arrays.asList(Long.toString(idPost)) );
+			Message msg = new Message( Message.SHOW, Message.POST, Common.toList(Long.toString(idPost)) );
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
@@ -646,23 +651,23 @@ public final class WinsomeClient implements AutoCloseable {
 	
 	public boolean deletePost(long idPost) throws IOException {
 		Common.andAllArgs(idPost >= 0);
-		return this.simpleRequest(Message.DELETE, Message.EMPTY, Arrays.asList(Long.toString(idPost)));
+		return this.simpleRequest(Message.DELETE, Message.EMPTY, Common.toList(Long.toString(idPost)));
 	}
 	
 	public boolean rewinPost(long idPost) throws IOException {
 		Common.andAllArgs(idPost >= 0);
-		return this.simpleRequest(Message.REWIN, Message.EMPTY, Arrays.asList(Long.toString(idPost)));
+		return this.simpleRequest(Message.REWIN, Message.EMPTY, Common.toList(Long.toString(idPost)));
 	}
 	
 	public boolean ratePost(long idPost, String vote) throws IOException {
 		Common.andAllArgs(idPost >= 0, vote != null);
-		return this.simpleRequest( Message.RATE, null, Arrays.asList(Long.toString(idPost), vote) );
+		return this.simpleRequest( Message.RATE, null, Common.toList(Long.toString(idPost), vote) );
 	}
 	
 	public boolean addComment(long idPost, String comment) throws IOException {
 		Common.andAllArgs(idPost >= 0, comment != null);
 		comment = comment.substring(1, comment.length()-1);
-		return this.simpleRequest(Message.COMMENT, null, Arrays.asList(Long.toString(idPost), comment) );
+		return this.simpleRequest(Message.COMMENT, null, Common.toList(Long.toString(idPost), comment) );
 	}
 	
 	/**

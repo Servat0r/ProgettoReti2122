@@ -30,7 +30,15 @@ public final class Pair<K,V> implements Serializable {
 	public final void setValue(V value) {
 		this.value = value;
 	}
-
-	public int hashCode() { return Objects.hash(key); }
-
+	
+	public int hashCode() { return Objects.hash(key, value); }
+	
+	@SuppressWarnings("unchecked")
+	public boolean equals(Object obj) {
+		if (this == obj) return true;
+		if (obj == null) return false;
+		if (getClass() != obj.getClass()) return false;
+		Pair<K,V> other = (Pair<K,V>) obj;
+		return Objects.equals(key, other.key) && Objects.equals(value, other.value);
+	}	
 }

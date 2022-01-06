@@ -104,7 +104,10 @@ public final class Debug {
 		dbgStream.println(sb.toString());
 	}
 	
-	public static void debugExc(Exception ex) { ex.printStackTrace(dbgStream); }
+	public synchronized static void debugExc(Exception ex) {
+		Debug.println("Exception caught: ");
+		ex.printStackTrace(dbgStream);
+	}
 	
 	public static void exit(int code) {
 		String debug = System.getProperty(DEBUGPROP);
