@@ -78,4 +78,5 @@ public final class ConfigParser {
 		return parseFile(filename, 0);
 	}
 	
+	public String toString() { return Common.jsonString(this); }
 }

@@ -10,7 +10,7 @@ import winsome.annotations.NotNull;
 import winsome.util.Common;
 import winsome.util.Serialization;
 
-public class Table<T extends Comparable<T>, V extends Indexable<T>> {
+public class Table<T extends Comparable<T>, V extends Indexable<T>> implements Iterable<V> {
 	
 	private final NavigableMap<T, V> map;
 	private transient ReentrantReadWriteLock lock = null;
@@ -122,4 +122,6 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 			return String.format("%s : %s", this.getClass().getSimpleName(), jsond);
 		} finally { if (lock != null) lock.readLock().unlock(); }
 	}
+	
+	public Iterator<V> iterator() { return this.map.values().iterator(); }
 }

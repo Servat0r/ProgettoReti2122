@@ -100,8 +100,5 @@ final class RewardManager extends Thread {
 	public boolean isClosed() { synchronized (state) { return (state == State.CLOSED); } }
 	
 	@NotNull
-	public String toString() {
-		String jsond = Serialization.GSON.toJson(this, RewardManager.class);
-		return String.format("%s: %s", this.getClass().getSimpleName(), jsond);
-	}
+	public String toString() { return Common.jsonString(this); }
 }

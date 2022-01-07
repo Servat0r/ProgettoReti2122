@@ -4,9 +4,9 @@ import java.io.*;
 import java.util.*;
 
 import winsome.server.ServerUtils;
-import winsome.util.Common;
+import winsome.util.*;
 
-public final class CommandParser implements AutoCloseable {
+public final class CommandParser implements AutoCloseable, Iterable<CommandDef> {
 	
 	public static final String DFLPROMPT = ">>> ";
 	
@@ -47,7 +47,7 @@ public final class CommandParser implements AutoCloseable {
 		RATESTR = "(\\+|\\-)1";
 	
 	private final Set<CommandDef> cdefs;
-	private final Scanner scanner;
+	private final transient Scanner scanner;
 	private boolean closed, cmdlinescan;
 	private String prompt;
 	
@@ -162,4 +162,8 @@ public final class CommandParser implements AutoCloseable {
 	}
 	
 	public synchronized boolean isClosed() { return closed; }
+	
+	public String toString() { return Common.jsonString(this); }
+	
+	public Iterator<CommandDef> iterator() { return this.cdefs.iterator(); }
 }

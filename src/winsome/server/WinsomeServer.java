@@ -820,9 +820,5 @@ public final class WinsomeServer implements AutoCloseable {
 	}
 	
 	@NotNull
-	public String toString() {
-		String cname = this.getClass().getSimpleName();
-		String jsond = Serialization.GSON.toJson(this, this.getClass());
-		return String.format("%s: %s", cname, jsond);
-	}
+	public String toString() { return Common.jsonString(this); }
 }

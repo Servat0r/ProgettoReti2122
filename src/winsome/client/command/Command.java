@@ -2,8 +2,7 @@ package winsome.client.command;
 
 import java.util.*;
 
-import winsome.util.Common;
-import winsome.util.Serialization;
+import winsome.util.*;
 
 public final class Command {
 	
@@ -37,9 +36,6 @@ public final class Command {
 		Command other = (Command) obj;
 		return Objects.equals(args, other.args) && Objects.equals(id, other.id) && Objects.equals(param, other.param);
 	}
-
-	public String toString() {
-		String jsond = Serialization.GSON.toJson(this);
-		return String.format("%s : %s", this.getClass().getSimpleName(), jsond);
-	}
+	
+	public String toString() { return Common.jsonString(this); }
 }

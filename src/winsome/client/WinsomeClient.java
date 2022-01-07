@@ -780,18 +780,5 @@ public final class WinsomeClient implements AutoCloseable {
 		this.out.println(EXIT);
 	}
 	
-	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		try {
-			Field[] fields = this.getClass().getDeclaredFields();
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 )
-					sb.append( (i > 0 ? ", " : "") + f.getName() + " = " + f.get(this) );
-			}
-		} catch (IllegalAccessException ex) { logger.logStackTrace(ex); }
-		sb.append("]");
-		return sb.toString();
-	}
+	public String toString() { return Common.jsonString(this); }
 }

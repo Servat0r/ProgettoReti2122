@@ -39,6 +39,7 @@ public final class Common {
 	}
 	/* QUOTING */
 	
+	
 	/* PRINTING */	
 	public static void printfln(PrintStream stream, String format, Object ...objs) {
 		Common.notNull(format);
@@ -49,7 +50,14 @@ public final class Common {
 	public static void printfln(String format, Object ...objs) { printfln(System.out, format, objs); }
 	
 	public static void printfErrln(String format, Object ...objs) { printfln(System.err, format, objs); }
+	
+	public static String jsonString(Object obj) {
+		Common.notNull(obj);
+		String cname = obj.getClass().getSimpleName(), jsond = Serialization.GSON.toJson(obj, obj.getClass());
+		return String.format("%s: %s", cname, jsond);
+	}
 	/* PRINTING */
+	
 	
 	/* EXCEPTIONS MESSAGES FORMATTING */
 	public static String excStr(String format, Object ...objs) {

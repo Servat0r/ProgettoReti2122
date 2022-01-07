@@ -91,4 +91,6 @@ final class Worker implements Runnable {
 			excHandler.accept(skey, ex);
 		}
 	}
+	
+	public String toString() { return Common.jsonString(this); }
 }

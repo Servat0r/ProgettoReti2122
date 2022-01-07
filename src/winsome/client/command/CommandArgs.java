@@ -4,7 +4,8 @@ import java.util.*;
 import java.util.function.*;
 import java.util.regex.*;
 
-import winsome.util.Serialization;
+import winsome.util.Common;
+
 
 public final class CommandArgs {
 
@@ -73,10 +74,5 @@ public final class CommandArgs {
 		return result;
 	}
 	
-	public String toString() {
-		String 
-			cname = this.getClass().getSimpleName(), 
-			jsond = Serialization.GSON.toJson(this, CommandArgs.class);
-		return String.format("%s: %s", cname, jsond);
-	}
+	public String toString() { return Common.jsonString(this); }
 }

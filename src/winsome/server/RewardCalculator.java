@@ -129,4 +129,6 @@ final class RewardCalculator {
 		}
 		return rewards;
 	}
+	
+	public String toString() { return Common.jsonString(this); }
 }

@@ -480,7 +480,5 @@ public final class Message {
 	}
 	
 	@NotNull
-	public String toString() {
-		return String.format("%s : %s", this.getClass().getSimpleName(), Serialization.GSON.toJson(this));
-	}
+	public String toString() { return Common.jsonString(this); }
 }

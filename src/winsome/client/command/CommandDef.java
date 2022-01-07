@@ -70,6 +70,8 @@ public final class CommandDef {
 
 	public String getId() { return this.id; }
 	
+	public HashMap<String, CommandArgs> getArgs() { return this.args; }
+	
 	public int hashCode() { return Objects.hash(id); }
 
 	public boolean equals(Object obj) {
@@ -79,4 +81,6 @@ public final class CommandDef {
 		CommandDef other = (CommandDef) obj;
 		return Objects.equals(id, other.id);
 	}
+	
+	public String toString() { return Common.jsonString(this); }
 }
