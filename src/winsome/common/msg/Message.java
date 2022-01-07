@@ -452,12 +452,10 @@ public final class Message {
 	public static final Message recvFromStream(InputStream in) throws IOException, MessageException {
 		Common.notNull(in);
 		
-		byte[] lengthArr = in.readNBytes(4);
+		byte[] lengthArr = Common.readNBytes(in, Integer.BYTES);
 		int length = Common.intFromByteArray(lengthArr);
 		
-		byte[] result = in.readNBytes(length);
-		Common.allAndState(result.length == length);
-		
+		byte[] result = Common.readNBytes(in, length);
 		
 		int idCode = Common.intFromByteArray(result);
 		int paramCode = Common.intFromByteArray(result, Integer.BYTES);

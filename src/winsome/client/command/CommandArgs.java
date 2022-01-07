@@ -61,11 +61,11 @@ public final class CommandArgs {
 		int index = 0;
 		String cmdstrip = new String(cmdline);
 		while (cmdstrip.length() > 0) {
-			cmdstrip = cmdstrip.strip();
+			cmdstrip = Common.strip(cmdstrip);
 			m = Pattern.compile(this.regexes[index]).matcher(cmdstrip);
 			if (!m.find()) throw new IllegalArgumentException(String.format(ARG_NMATCH, index+1));
 			int len = m.end();
-			String ccmd = new String(cmdstrip.substring(0, len)).strip();
+			String ccmd = Common.strip( new String(cmdstrip.substring(0, len)) );
 			result.add(ccmd);
 			cmdstrip = cmdstrip.substring(len);
 			index++;

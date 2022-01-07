@@ -17,9 +17,12 @@ final class WinsomeClientMain {
 			client = new WinsomeClient(ConfigParser.parseFile(config, ConfigParser.LOWER));
 			exitCode = client.mainloop();
 		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
+			client.logger().logStackTrace(ex);
 			exitCode = 1;
-		} finally { try { client.close(); } catch (Exception e) { exitCode = 1; } }
+		} finally {
+			try { client.close(); }
+			catch (Exception exc) {client.logger().logStackTrace(exc); exitCode = 1; }
+		}
 		Debug.exit(exitCode);
 	}
 }

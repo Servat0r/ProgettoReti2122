@@ -30,13 +30,13 @@ public final class CommandDef {
 	}
 	
 	public static final boolean matchWSpaceComment(String cmdline) {
-		String cmdstrip = cmdline.strip();
+		String cmdstrip = Common.strip(cmdline);
 		if (cmdstrip.length() == 0 || cmdstrip.startsWith("#")) return true;
 		else return false;
 	}
 	
 	public static final String matchId(String cmdline) {
-		String cmdstrip = cmdline.strip();
+		String cmdstrip = Common.strip(cmdline);
 		Matcher m = Pattern.compile(ID_PARAM_REGEX).matcher(cmdstrip);
 		return (m.find() ? cmdstrip.substring(0, m.end()) : null);
 	}
@@ -47,7 +47,7 @@ public final class CommandDef {
 		String start = null;
 		String param = null;
 		String args = null;
-		String cmdstrip = cmdline.strip();
+		String cmdstrip = Common.strip(cmdline);
 		for (String key : this.args.keySet()) {
 			CommandArgs c = this.args.get(key);
 			String val = (c != null ? c.getRegex() : null);
@@ -58,7 +58,7 @@ public final class CommandDef {
 			if (Pattern.matches(regex, cmdstrip)) {
 				Matcher m = Pattern.compile(start).matcher(cmdstrip);
 				m.find();
-				args = cmdstrip.substring(m.end()).strip();
+				args = Common.strip( cmdstrip.substring(m.end()) );
 				param = (key != null ? new String(key) : null);
 				if (args.length() > 0) result = new Command(new String(id), param, c.extractArgs(args));
 				else result = new Command(new String(id), param, new ArrayList<>());

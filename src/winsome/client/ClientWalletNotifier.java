@@ -58,5 +58,6 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 		}
 	}
 	
+	
 	public void close() throws IOException { this.socket.close(); }	
 }

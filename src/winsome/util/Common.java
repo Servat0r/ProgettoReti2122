@@ -26,7 +26,7 @@ public final class Common {
 	}
 	/* THREADS */
 	
-	/* QUOTING */
+	/* STRING MANIPULATION */
 	public static String quote(String str) {
 		Common.notNull(str);
 		return new String("\"" + str + "\"");
@@ -37,7 +37,24 @@ public final class Common {
 		if (str.startsWith("\"") && str.endsWith("\"")) return str.substring(1, str.length()-1);
 		else return new String(str);
 	}
-	/* QUOTING */
+	
+	public static String strip(String str) {
+		Common.notNull(str);
+		char[] chars = str.toCharArray();
+		int leading = 0, trailing = chars.length - 1;
+		while (leading < chars.length) {
+			if (Character.isWhitespace(chars[leading])) leading++;
+			else break;
+		}
+		while (trailing >= leading) {
+			if (Character.isWhitespace(chars[trailing])) trailing--;
+			else break;
+		}
+		int len = 1 + trailing - leading;
+		if (len <= 0 || leading >= chars.length) return new String("");
+		else return new String(chars, leading, len);
+	}
+	/* STRING MANIPULATION */
 	
 	
 	/* PRINTING */	
@@ -216,7 +233,9 @@ public final class Common {
 	
 	public static Integer intFromByteArray(byte[] arr) { return intFromByteArray(arr, 0); }
 	
-	public static byte[] readNBytes(InputStream in, int length) throws IOException {
+	public static final String UNSUFF_LEN = "Number of byte(s) read is less than %d";
+	
+	public static byte[] readNBytes(InputStream in, int length, boolean enforceLength) throws IOException {
 		Common.andAllArgs(in != null, length >= 0);
 		List<Byte> total = new ArrayList<>();
 		int bread = 0, res;
@@ -226,10 +245,17 @@ public final class Common {
 			else total.add((byte)res);
 			bread++;
 		}
+		
+		Common.allAndState(bread <= length);
+		if (enforceLength && (bread != length)) throw new IOException( String.format(UNSUFF_LEN, length) );
+		
 		byte[] result = new byte[bread];
-		for (int i = 0; i < bread; i++) result[i] = total.get(i);
+		for (int i = 0; i < bread; i++) result[i] = total.get(i).byteValue();
 		return result;
 	}
+	
+	public static byte[] readNBytes(InputStream in, int length) throws IOException
+		{ return Common.readNBytes(in, length, true); }
 	
 	@SafeVarargs
 	public static <T> List<T> toList(List<T> tail, T... head){

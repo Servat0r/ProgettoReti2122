@@ -206,8 +206,9 @@ public final class WinsomeClient implements AutoCloseable {
 	 * @return true if the method executed correctly, false in case of a (not fatal) error, e.g. in case
 	 * of connection closed by the server.
 	 * @throws IOException If an IO error occurs, different from closure of any socket.
+	 * @throws InterruptedException 
 	 */
-	private boolean dispatch(Command cmd) throws IOException {
+	private boolean dispatch(Command cmd) throws IOException, InterruptedException {
 		Common.notNull(cmd);
 		String id = cmd.getId();
 		String param = cmd.getParam();
@@ -500,7 +501,7 @@ public final class WinsomeClient implements AutoCloseable {
 		} catch (MessageException | IllegalArgumentException ex) { logger.logStackTrace(ex); return false; }
 	}
 	
-	public boolean logout(String username) throws IOException {
+	public boolean logout(String username) throws IOException, InterruptedException {
 		Common.notNull(username);
 		try {
 			Message msg = new Message(Message.LOGOUT, Message.EMPTY, Common.toList(username));
@@ -513,6 +514,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (!param.equals(Message.EMPTY)) return this.printError(ILL_RESPONSE);
 				/* Closing multicast handling thread (does NOT join the other thread!) */
 				if (this.walletNotifier != null) this.walletNotifier.close();
+				this.walletNotifier.join();
 				/* Deregistering for followers updates */
 				if ( !this.svHandler.followersUnregister(this.getUsername()) )
 					{ return this.printError("when unregistering for followers updates"); }

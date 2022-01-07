@@ -56,7 +56,7 @@ public final class ConfigParser {
 		){
 			result = new HashMap<>();
 			while (s.hasNextLine()) {
-				nextLine = s.nextLine().strip();
+				nextLine = Common.strip( s.nextLine() );
 				currentLine++;
 				if (nextLine.equals("") || nextLine.startsWith(COMM)) continue;
 				else if (Pattern.matches(ASSIGN_LINE, nextLine)) {
@@ -65,7 +65,8 @@ public final class ConfigParser {
 					String key = nextLine.substring(0, m.end());
 					if (flags == UPPER) key = key.toUpperCase();
 					else if (flags == LOWER) key = key.toLowerCase();
-					String value = nextLine.substring(m.end()).strip().substring(EQ.length()).strip();
+					String value = Common.strip( nextLine.substring(m.end()) ).substring(EQ.length());
+					value = Common.strip(value);
 					if (result.containsKey(key)) throw new ConfigParsingException("Line " + currentLine + ": Key already defined: '" + key + "'");
 					else result.put( new String(key), new String(value) );
 				} else throw new ConfigParsingException("Line " + currentLine + ": Syntax error: '" + nextLine + "'");

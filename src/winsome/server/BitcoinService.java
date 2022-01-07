@@ -46,7 +46,7 @@ final class BitcoinService {
 		in.close();
 		byte[] bs = new byte[reads.size()];
 		for (int i = 0; i < bs.length; i++) bs[i] = reads.get(i);
-		double exc = Double.parseDouble(new String(bs).strip());
+		double exc = Double.parseDouble( Common.strip(new String(bs)) );
 		return value * exc;
 	}
 	
