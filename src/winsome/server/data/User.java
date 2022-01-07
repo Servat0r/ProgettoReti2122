@@ -33,10 +33,10 @@ public final class User implements Indexable<String>, Comparable<User> {
 	private static final User max(User u1, User u2) { return (u1.compareTo(u2) <= 0 ? u2 : u1); }
 	
 	private Post feedSearch(long idPost) {
-		List<User> iter;
-		synchronized (this) { iter = this.following.getAll(); }
+		NavigableSet<User> set;
+		synchronized (this) { set = this.following.getAll(); }
 		Post p = null;
-		for (User user : iter) {
+		for (User user : set) {
 			if ((p = user.blog.get(idPost)) != null) break;
 		}
 		return p;
@@ -145,7 +145,7 @@ public final class User implements Indexable<String>, Comparable<User> {
 	@NotNull
 	public ConcurrentMap<String, List<String>> getFollowers() { //list followers
 		ConcurrentMap<String, List<String>> result = new ConcurrentHashMap<>();
-		List<User> users;
+		NavigableSet<User> users;
 		synchronized (this) { users = followers.getAll(); } //For following static methods
 		for (User u : users) result.put(u.key(), u.tags());
 		return result;
@@ -154,7 +154,7 @@ public final class User implements Indexable<String>, Comparable<User> {
 	@NotNull
 	public ConcurrentMap<String, List<String>> getFollowing() { //list following
 		ConcurrentMap<String, List<String>> result = new ConcurrentHashMap<>();
-		List<User> users;
+		NavigableSet<User> users;
 		synchronized (this) { users = following.getAll(); } //For following static methods
 		for (User u : users) result.put(u.key(), u.tags());
 		return result;
@@ -162,22 +162,23 @@ public final class User implements Indexable<String>, Comparable<User> {
 		
 	@NotNull
 	public List<String> getBlog() { //blog
-		List<Post> posts = this.blog.getAll();
+		NavigableSet<Post> posts = new TreeSet<>();
+		posts.addAll(this.blog.getAll());
 		List<String> result = new ArrayList<>();
-		for (Post p : posts) result.add(p.getPostInfo());
+		Iterator<Post> iter = posts.iterator();
+		while (iter.hasNext()) result.add(iter.next().getPostInfo()); //TODO NOTA: Così i post appariranno ordinati per id al client
 		return result;
 	}
 	
 	@NotNull
 	public List<String> getFeed() { //show feed
-		List<User> users;
+		NavigableSet<User> users;
 		synchronized (this) {users = this.following.getAll();}
+		NavigableSet<Post> posts = new TreeSet<>();
 		List<String> result = new ArrayList<>();
-		List<Post> posts;
-		for (User u : users) {
-			posts = u.blog.getAll();
-			for (Post p : posts) result.add(p.getPostInfo());
-		}
+		for (User u : users) posts.addAll(u.blog.getAll());
+		Iterator<Post> iter = posts.iterator();
+		while (iter.hasNext()) result.add(iter.next().getPostInfo()); //TODO NOTA: Così i post appariranno ordinati per id al client
 		return result;
 	}
 	

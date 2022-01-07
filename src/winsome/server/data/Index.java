@@ -60,8 +60,8 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 	}
 	
 	@NotNull
-	public List<V> getAll(){
-		List<V> result = new ArrayList<>();
+	public NavigableSet<V> getAll(){
+		NavigableSet<V> result = new TreeSet<>();
 		try {
 			lock.readLock().lock();
 			result.addAll(this.table.get(keys));
@@ -71,9 +71,19 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 	
 	
 	@NotNull
-	public NavigableSet<T> keySet(){
+	public NavigableSet<T> unmodifiableKeySet(){
 		try {lock.readLock().lock(); return Collections.unmodifiableNavigableSet(this.keys);}
 		finally {lock.readLock().unlock();}
+	}
+	
+	@NotNull
+	public NavigableSet<T> keySet(){
+		NavigableSet<T> result = new TreeSet<>();
+		try {
+			lock.readLock().lock();
+			result.addAll(this.keys);
+			return result;
+		} finally {lock.readLock().unlock();}
 	}
 	
 	public boolean equals(Object obj) { return (this == obj); }

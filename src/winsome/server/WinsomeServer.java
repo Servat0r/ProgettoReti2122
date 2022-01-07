@@ -812,7 +812,6 @@ public final class WinsomeServer implements AutoCloseable {
 			
 			loggedMap.clear();
 			unlogged.clear();
-			workersFactory.clearList();
 			logger.log("Data cleared");
 			
 			this.logger.close();

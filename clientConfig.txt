@@ -28,6 +28,3 @@ TIMEOUT		=	100000
 
 # Logging
 LOGGER		=	client.log
-
-# TODO
-# Like dell'autore da correggere!
