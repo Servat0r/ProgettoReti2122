@@ -9,7 +9,7 @@ public final class CommandParserTestMain {
 	public static void main(String[] args) {
 		Command cmd;
 		try ( CommandParser parser = new CommandParser(new FileInputStream("cmd_examples.txt")) ){
-			while (parser.hasNextCmd()) {
+			while ( !(cmd = parser.nextCmd()).equals(Command.NULL) ) {
 				cmd = parser.nextCmd();
 				System.out.println( (cmd != null ? cmd.toString() : "match not found") );
 			}

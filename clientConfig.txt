@@ -24,10 +24,10 @@ REGPORT		=	7777
 TIMEOUT		=	100000
 
 # Input
-INPUT		=	input.txt
+# INPUT		=	input.txt
+
+# Logging
+LOGGER		=	client.log
 
 # TODO
-# title.length <= 20
-# content.length <= 500
-# Like + dislike della stessa persona, like dell'autore da correggere!
-# Controllare il doppio rewin
+# Like dell'autore da correggere!

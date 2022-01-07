@@ -39,15 +39,16 @@ public final class Common {
 	}
 	/* QUOTING */
 	
-	/* PRINTING */
-	public static void println(Object obj) { System.out.println(obj); }
-	public static void println() { System.out.println(); }
-	public static void print(Object obj) { System.out.print(obj); }
-	public static void printf(String format, Object... args) { System.out.printf(format, args); }
-	public static void printErrln(Object obj) { System.err.println(obj); }
-	public static void printErrln() { System.err.println(); }
-	public static void printErr(Object obj) { System.err.print(obj); }
-	public static void printfErr(String format, Object... args) { System.err.printf(format, args); }
+	/* PRINTING */	
+	public static void printfln(PrintStream stream, String format, Object ...objs) {
+		Common.notNull(format);
+		String msg = String.format(format, objs);
+		stream.println(msg);
+	}
+	
+	public static void printfln(String format, Object ...objs) { printfln(System.out, format, objs); }
+	
+	public static void printfErrln(String format, Object ...objs) { printfln(System.err, format, objs); }
 	/* PRINTING */
 	
 	/* EXCEPTIONS MESSAGES FORMATTING */

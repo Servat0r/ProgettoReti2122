@@ -39,7 +39,7 @@ final class Worker implements Runnable {
 				param = msg.getParamStr(); //Cannot throw MessageException
 				String u = server.translateChannel(client);
 				String msgstr = (u != null ? "Received request from user " + u : "Received request from anonymous user ");
-				server.log("%s: it is (%s, %s - %s)", msgstr, id, param, msg.getArguments().toString());
+				server.logger().log("%s: it is (%s, %s - %s)", msgstr, id, param, msg.getArguments().toString());
 			} catch (MessageException mex) { mex.printStackTrace(); }
 			List<String> args = msg.getArguments();
 			msg = null;
@@ -87,7 +87,7 @@ final class Worker implements Runnable {
 			skey.interestOps(SelectionKey.OP_WRITE);
 			server.selector().wakeup();
 		} catch (Exception ex) {
-			server.logStackTrace(ex);
+			server.logger().logStackTrace(ex);
 			excHandler.accept(skey, ex);
 		}
 	}

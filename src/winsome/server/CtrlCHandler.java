@@ -23,10 +23,10 @@ final class CtrlCHandler implements Runnable {
 	
 	public void run() {
 		synchronized (this) {
-			if (!received) { server.log(interruptMsg); received = true; } else return;
+			if (!received) { server.logger().log(interruptMsg); received = true; } else return;
 		}
 		try {  server.close(); }
 		catch (Exception ex) { Debug.debugExc(ex); ex.printStackTrace(); }
-		finally { server.log(TERM); }
+		finally { server.logger().log(TERM); }
 	}
 }

@@ -14,6 +14,7 @@ import winsome.client.command.*;
 import winsome.common.config.ConfigUtils;
 import winsome.common.msg.*;
 import winsome.common.rmi.*;
+import winsome.server.data.Logger;
 import winsome.util.*;
 
 public final class WinsomeClient implements AutoCloseable {
@@ -37,7 +38,19 @@ public final class WinsomeClient implements AutoCloseable {
 		INV_CMD = "Invalid command: '%s'",
 		ILLARG = "Illegal argument passed";
 	
+	private static final String
+		LOGSTR = "CLIENT @ %s: { %s : %s }",
+		ERRLOGSTR = "CLIENT @ %s : ERROR @ %s : %s";
+	
+	private static final String WNOTIFIERNAME = "WalletNotifier";
+	
 	private CommandParser parser = null;
+	
+	private InputStream in = System.in;
+
+	private PrintStream out = System.out;
+
+	private Logger logger = null;
 	
 	private String serverHost = null;
 	private int tcpPort = 0;
@@ -45,18 +58,14 @@ public final class WinsomeClient implements AutoCloseable {
 	private InputStream tcpIn = null;
 	private OutputStream tcpOut = null;
 	
-	private ClientWalletNotifier mcastThread = null;
-	private List<String> walletNotifies = null;
+	private ClientWalletNotifier walletNotifier = null;
+	private LinkedBlockingQueue<String> walletNotifies = null;
 	
 	private String regHost = null;
 	private int regPort = 0;
 	private Registry reg = null;
 		
 	private State state = State.INIT;
-	
-	private InputStream in = System.in;
-	private PrintStream out = System.out;
-	private PrintStream err = System.err;
 	
 	private ClientInterface clHandler = null;
 	private ServerInterface svHandler = null;
@@ -167,9 +176,9 @@ public final class WinsomeClient implements AutoCloseable {
 		return sb.toString();
 	}
 
-	private boolean printfError(String msg, Object... args) { this.err.printf("Error: " + msg, args); return false; }
+	private boolean printfError(String msg, Object... args) { this.out.printf("Error: " + msg, args); return false; }
 	
-	private boolean printError(String msg) { this.err.println("Error: " + msg); return false; }
+	private boolean printError(String msg) { this.out.println("Error: " + msg); return false; }
 	
 	private boolean printOK(String fmt, Object...objs) { this.out.println(String.format(fmt, objs)); return true; }
 	
@@ -218,12 +227,11 @@ public final class WinsomeClient implements AutoCloseable {
 			else if ( id.equals(Message.LOGIN) ) {
 				String u = args.get(0);
 				result = this.login(args.get(0), args.get(1));
-				if (result) this.setUsername(u);
+				if (result) { this.setUsername(u); this.parser.setPrompt("%s> ", u); }
 			}
 			
 			else if ( id.equals(Message.QUIT) || id.equals(Message.EXIT)) {
 				if (this.isUserSet()) return this.printError(ALREADY_LOGGED);
-				//else { this.setState(State.EXIT); result = true; }
 				else {
 					result = this.quitReq();
 					if (result) this.setState(State.EXIT);
@@ -239,7 +247,10 @@ public final class WinsomeClient implements AutoCloseable {
 						
 			else if ( id.equals(Message.LOGOUT) ) {
 				if (!this.isUserSet()) return this.printError(NONE_LOGGED);
-				else { result = this.logout(this.getUsername()); if (result) this.unsetUsername(); }
+				else {
+					result = this.logout(this.getUsername());
+					if (result) { this.unsetUsername(); this.parser.resetPrompt(); }
+				}
 			}
 			
 			else if ( id.equals(Message.LIST) ) {
@@ -272,9 +283,18 @@ public final class WinsomeClient implements AutoCloseable {
 			else if ( id.equals(Message.COMMENT) ) result = this.addComment(Long.parseLong(args.get(0)), args.get(1));
 			
 			else if ( id.equals(Message.WALLET) ) {
-				if ( param == null || param.equals(Message.EMPTY) ) result = this.getWallet();
-				else if (param.equals(Message.BTC)) result = this.getWalletInBitcoin();
-				else return this.printError(Common.excStr(INV_PARAM, param));
+				switch (param) {
+					case Message.EMPTY : { result = this.getWallet(); break; }
+					case Message.BTC : { result = this.getWalletInBitcoin(); break; }
+					case Message.NOTIFY : { 
+						List<String> notifies = this.walletNotifies();
+						StringBuilder sb = new StringBuilder();
+						for (String str : notifies) sb.append(str + "\n");
+						this.out.print(sb.toString());
+						result = true;
+						break;
+					} default : return this.printError(Common.excStr(INV_PARAM, param));
+				}				 
 			}
 			
 			else if ( id.equals(Message.HELP) ) {
@@ -302,7 +322,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }		
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
 	}
 	
 	private boolean walletRequest(boolean btc) throws IOException {
@@ -319,7 +339,7 @@ public final class WinsomeClient implements AutoCloseable {
 				return this.printOK(l.get(0) + "\n" + output);
 			} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 			else return this.printError(ILL_RESPONSE);
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }				
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }				
 	}
 
 	private boolean setFollowers(ConcurrentMap<String, List<String>> fwers) {
@@ -370,6 +390,8 @@ public final class WinsomeClient implements AutoCloseable {
 		Function<String, InputStream> newInStr = ConfigUtils.newInputStream;
 		Function<String, PrintStream> newPrStr = ConfigUtils.newPrintStream;
 		
+		PrintStream stream;
+		
 		if (configMap != null) {
 			regHost = ConfigUtils.setValueOrDefault(configMap, "reghost", newStr, "localhost");
 			serverHost = ConfigUtils.setValueOrDefault(configMap, "server", newStr, "127.0.0.1");
@@ -377,14 +399,15 @@ public final class WinsomeClient implements AutoCloseable {
 			regPort = ConfigUtils.setValueOrDefault(configMap, "regport", newInt, 0);
 			in = ConfigUtils.setValueOrDefault(configMap, "input", newInStr, System.in);
 			out = ConfigUtils.setValueOrDefault(configMap, "output", newPrStr, System.out);
-			err = ConfigUtils.setValueOrDefault(configMap, "error", newPrStr, System.err);
+			stream = ConfigUtils.setValueOrDefault(configMap, "logger", newPrStr, System.out);
+			logger = new Logger(LOGSTR, ERRLOGSTR, stream);
 		}
 		this.parser = new CommandParser(in);
 		this.clHandler = new ClientInterfaceImpl(this);
 		
 		this.out.println(clHandler);
 		
-		this.walletNotifies = new ArrayList<>();
+		this.walletNotifies = new LinkedBlockingQueue<>();
 		
 		this.tcpSocket = new Socket(this.serverHost, this.tcpPort);
 		this.tcpIn = this.tcpSocket.getInputStream();
@@ -394,19 +417,16 @@ public final class WinsomeClient implements AutoCloseable {
 		this.svHandler = (ServerInterface) this.reg.lookup(ServerInterface.REGSERVNAME);
 		this.out.println(INTRO);
 	}
-	
-	public WinsomeClient() throws FileNotFoundException, RemoteException, NotBoundException, IOException { this(null); }
-	
-	public final List<String> walletNotifyingList() { return this.walletNotifies; }
+		
+	public final LinkedBlockingQueue<String> walletNotifyingList() { return this.walletNotifies; }
 	
 	public final String getHost() { return this.serverHost; }
 
 	public final InputStream getIn() { return this.in; }
 
 	public final PrintStream getOut() {return this.out; }
-
-	public final PrintStream getErr() { return this.err; }
-
+	
+	
 	/**
 	 * Mainloop of the client: waits for a command while parser InputStream is open and it has
 	 * not received and correctly executed a quit/exit request, then executes it. 
@@ -416,13 +436,14 @@ public final class WinsomeClient implements AutoCloseable {
 	public int mainloop() throws Exception {
 		int retCode = 0;
 		Command cmd;
-		while ((this.getState() != State.EXIT) && (this.parser.hasNextCmd())) {
+		while (this.getState() != State.EXIT) {
 			cmd = this.parser.nextCmd();
 			if (cmd == null) { this.printError("Unrecognized command"); }
-			else if (cmd.equals(Command.NULL)) {}
+			else if (cmd.equals(Command.NULL)) break;
+			else if (cmd.equals(Command.SKIP)) {}
 			else {
 				try { this.dispatch(cmd); }
-				catch (IOException e) { e.printStackTrace(this.err); retCode = 1; break; }
+				catch (IOException e) { logger.logStackTrace(e); retCode = 1; break; }
 			}
 		}
 		this.close();
@@ -457,9 +478,10 @@ public final class WinsomeClient implements AutoCloseable {
 					mcastMsgLen = Integer.parseInt(l.get(3));
 				} catch (NumberFormatException nfe)
 					{ return this.printfError("<%s, %s> are not valid integers!%n", l.get(2), l.get(3)); }
-				this.mcastThread = new ClientWalletNotifier(this, mcastPort, mcastAddr, mcastMsgLen);
-				this.mcastThread.setDaemon(true);
-				this.mcastThread.start();
+				this.walletNotifier = new ClientWalletNotifier(this, mcastPort, mcastAddr, mcastMsgLen);
+				this.walletNotifier.setDaemon(true);
+				this.walletNotifier.setName(WNOTIFIERNAME);
+				this.walletNotifier.start();
 				if (l.size() > 4) {
 					if ( !this.setFollowers( Serialization.deserializeMap( l.subList(4, l.size()) ) ) )
 						{ return this.printError("when retrieving current followers"); }
@@ -475,7 +497,7 @@ public final class WinsomeClient implements AutoCloseable {
 			
 			} else return this.printError(ILL_RESPONSE);
 			
-		} catch (MessageException | IllegalArgumentException ex) { ex.printStackTrace(err); return false; }
+		} catch (MessageException | IllegalArgumentException ex) { logger.logStackTrace(ex); return false; }
 	}
 	
 	public boolean logout(String username) throws IOException {
@@ -490,7 +512,7 @@ public final class WinsomeClient implements AutoCloseable {
 			if (id.equals(Message.OK)) {
 				if (!param.equals(Message.EMPTY)) return this.printError(ILL_RESPONSE);
 				/* Closing multicast handling thread (does NOT join the other thread!) */
-				if (this.mcastThread != null) this.mcastThread.close();
+				if (this.walletNotifier != null) this.walletNotifier.close();
 				/* Deregistering for followers updates */
 				if ( !this.svHandler.followersUnregister(this.getUsername()) )
 					{ return this.printError("when unregistering for followers updates"); }
@@ -501,7 +523,7 @@ public final class WinsomeClient implements AutoCloseable {
 			} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 			
 			else return this.printError(ILL_RESPONSE);
-		} catch (MessageException ex) { ex.printStackTrace(err); return false; }
+		} catch (MessageException ex) { logger.logStackTrace(ex); return false; }
 	}
 	
 	public boolean listUsers() throws IOException {
@@ -527,7 +549,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }
 	}
 	
 	public boolean listFollowers() {
@@ -560,7 +582,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }
 	}
 	
 	public boolean followUser(String idUser) throws IOException {
@@ -596,7 +618,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }
 	}
 	
 	public boolean createPost(String title, String content) throws IOException {
@@ -625,7 +647,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 				else return this.printError(ILL_RESPONSE);
 			}			
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }		
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
 	}
 	
 	public boolean showPost(long idPost) throws IOException {
@@ -646,7 +668,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 				else return this.printError(ILL_RESPONSE);
 			}			
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }		
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
 	}
 	
 	public boolean deletePost(long idPost) throws IOException {
@@ -684,6 +706,14 @@ public final class WinsomeClient implements AutoCloseable {
 	 * @throws IOException If an IO error (different from connection closing) occurs.
 	 */	
 	public boolean getWalletInBitcoin() throws IOException { return this.walletRequest(true); }
+	
+	
+	public List<String> walletNotifies() {
+		List<String> result = new ArrayList<>();
+		String curr;
+		while ( (curr = walletNotifies.poll()) != null) result.add(curr);
+		return result;
+	}
 	
 	/**
 	 * Prints help guide for the specified command.
@@ -724,8 +754,10 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(msg.getArguments().get(0));
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { mex.printStackTrace(err); return false; }		
+		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
 	}
+	
+	protected Logger logger() { return logger; }
 	
 	/**
 	 * Releases all resources associated with client: closes parser, tcp connection, IO streams,
@@ -736,10 +768,10 @@ public final class WinsomeClient implements AutoCloseable {
 		if (!this.tcpSocket.isClosed()) this.tcpSocket.close();
 		if (this.in != System.in) this.in.close();
 		if (this.out != System.out) this.out.close();
-		if (this.err != System.err) this.err.close();
-		if (this.mcastThread != null) {
-			this.mcastThread.close();
-			this.mcastThread.join();
+		this.logger.close();
+		if (this.walletNotifier != null) {
+			this.walletNotifier.close();
+			this.walletNotifier.join();
 		}
 		String user = this.getUsername();
 		if ( (user != null) && this.svHandler.isRegistered(user) ) this.svHandler.followersUnregister(user);
@@ -758,7 +790,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if ( (f.getModifiers() & Modifier.STATIC) == 0 )
 					sb.append( (i > 0 ? ", " : "") + f.getName() + " = " + f.get(this) );
 			}
-		} catch (IllegalAccessException ex) { ex.printStackTrace(err); }
+		} catch (IllegalAccessException ex) { logger.logStackTrace(ex); }
 		sb.append("]");
 		return sb.toString();
 	}

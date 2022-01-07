@@ -5,15 +5,16 @@ import winsome.util.Debug;
 
 final class WinsomeClientMain {
 
-	public static final String CONFIG_FNAME = "clientConfig.txt";
+	public static final String CONFIG = "clientConfig.txt";
 	
 	public static void main(String[] args) {
+		String config = (args.length > 0 ? args[0] : CONFIG);
 		Debug.setDebug();
 		//Debug.setDbgStream("client.dbg");
 		WinsomeClient client = null;
 		int exitCode = 0;
 		try {
-			client = new WinsomeClient(ConfigParser.parseFile(CONFIG_FNAME, ConfigParser.LOWER));
+			client = new WinsomeClient(ConfigParser.parseFile(config, ConfigParser.LOWER));
 			exitCode = client.mainloop();
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);

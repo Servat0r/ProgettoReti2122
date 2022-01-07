@@ -10,6 +10,7 @@ final class WinsomeServerMain {
 	public static final String CONFIG = "serverConfig.txt";
 	
 	public static void main(String[] args) {
+		String config = (args.length > 0 ? args[0] : CONFIG);
 		Debug.setDebug();
 		Debug.setDbgStream("server.dbg");
 		int exitCode = 0;
@@ -17,7 +18,7 @@ final class WinsomeServerMain {
 		Thread t = null;
 		Pair<Boolean, String> result = new Pair<>(false, "Error during execution");
 		try {
-			Map<String, String> configMap = ConfigParser.parseFile(CONFIG, ConfigParser.LOWER);
+			Map<String, String> configMap = ConfigParser.parseFile(config, ConfigParser.LOWER);
 			if (WinsomeServer.createServer(configMap) && (server = WinsomeServer.getServer()) != null) {
 				t = new Thread(new CtrlCHandler(server));
 				t.setName(CtrlCHandler.DFLNAME);

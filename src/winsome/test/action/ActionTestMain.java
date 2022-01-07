@@ -19,11 +19,11 @@ public final class ActionTestMain {
 	private static Runnable read = new Runnable() {
 		public void run() {
 			String name = Thread.currentThread().getName();
-			Common.println(name + " started @ " + new Date());
+			Common.printfln(name + " started @ " + new Date());
 			Action a = Action.newRatePost(true, "user", "user", gen.nextId());
 			try { Thread.sleep(conv * timeout); registry.putAction(a); }
 			catch (Exception e) { e.printStackTrace(); }
-			Common.println(name + " ended @ " + new Date());
+			Common.printfln(name + " ended @ " + new Date());
 		}
 	};
 	
@@ -31,13 +31,13 @@ public final class ActionTestMain {
 		public void run() {
 			try {
 				String name = Thread.currentThread().getName();
-				Common.println(name + " started @ " + new Date());
+				Common.printfln(name + " started @ " + new Date());
 				List<Action> l = new ArrayList<>();
 				for (int i = 0; i < nwrite; i++) {
-					Common.println(name + " iteration #" + i + " started @ " + new Date());
+					Common.printfln(name + " iteration #" + i + " started @ " + new Date());
 					System.out.println("scan = " + registry.getActions(l) + "\n" + l);
 					l.clear();
-					Common.println(name + " iteration #" + i + " ended @ " + new Date());
+					Common.printfln(name + " iteration #" + i + " ended @ " + new Date());
 				}
 			} catch (Exception ex) { ex.printStackTrace(); }
 		}
@@ -49,21 +49,21 @@ public final class ActionTestMain {
 		Thread writer = new Thread(write);
 		writer.setName("Writer");
 		registry.open();
-		Common.println(registry);
+		Common.printfln("%s", registry);
 		writer.start();
 		for (int i = 0; i < N; i++) {
 			readers[i] = new Thread(read);
 			readers[i].setName("Reader #" + i);
 			readers[i].start();
-			if (i == Math.min(14, N/2)) { registry.close(); Common.println("Closed registry @ " + new Date()); }
+			if (i == Math.min(14, N/2)) { registry.close(); Common.printfln("Closed registry @ " + new Date()); }
 			Thread.sleep(1000);
 		}
 		registry.close();
-		Common.println("Joining readers @ " + new Date());
+		Common.printfln("Joining readers @ " + new Date());
 		for (Thread t : readers) t.join();
-		Common.println("Joining writer @ " + new Date());
+		Common.printfln("Joining writer @ " + new Date());
 		writer.join();
-		Common.println("Ended @ " + new Date());
-		Common.println(registry);
+		Common.printfln("Ended @ " + new Date());
+		Common.printfln("%s", registry);
 	}
 }

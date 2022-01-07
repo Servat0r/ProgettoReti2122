@@ -8,7 +8,9 @@ import winsome.util.Serialization;
 public final class Command {
 	
 	public static final String EMPTY = "";
-	public static final Command NULL = new Command(EMPTY, EMPTY, null);
+	public static final Command
+		SKIP = new Command(EMPTY, EMPTY, null),
+		NULL = new Command(EMPTY, null, null);
 	
 	private final String id;
 	private final String param;

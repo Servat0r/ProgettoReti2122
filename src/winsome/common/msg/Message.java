@@ -63,6 +63,7 @@ public final class Message {
 		FOLLOWING = "following",
 		FEED = "feed",
 		BTC = "btc",
+		NOTIFY = "notify",
 		CMD = "cmd";
 	
 	public static final List<String> COMMANDS = Common.toList(

@@ -53,7 +53,7 @@ final class RewardManager extends Thread {
 	
 	
 	public void run() {
-		server.log("RewardManager service started");
+		server.logger().log("RewardManager service started");
 		int time = 1;
 		try {
 			state = State.OPEN;
@@ -79,16 +79,16 @@ final class RewardManager extends Thread {
 					}
 					packet = buildPacket();
 					socket.send(packet);
-					server.log("Reward update notify sent (#%d time)", time);
+					server.logger().log("Reward update notify sent (#%d time)", time);
 					time++;
 				} else if (!this.isClosed()) throw new IllegalStateException();
 				completed.clear();
 			}
 			socket.leaveGroup(mcastaddr, net);
 		} catch (Exception ex) {
-			server.logStackTrace(ex);
+			server.logger().logStackTrace(ex);
 			if (ex.getClass().equals(IllegalStateException.class)) server.signalIllegalState(ex);
-		} finally { socket.close(); registry.close(); server.log("RewardManager service ended"); }
+		} finally { socket.close(); registry.close(); server.logger().log("RewardManager service ended"); }
 	}
 	
 	public RewardManager(WinsomeServer server, String mcastAddr, int mcastPort,

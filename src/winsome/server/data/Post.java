@@ -163,7 +163,8 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	}
 	
 	
-	public boolean rewin(String user) {
+	public boolean rewin(String user) throws DataException {
+		if (user.equals(this.author)) throw new DataException(DataException.SAME_AUTHOR);
 		String copy = new String(user);
 		return this.rewinners.add(copy);
 	}
