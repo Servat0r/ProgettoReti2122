@@ -23,7 +23,7 @@ final class RewardCalculator {
 	private final double rewCur;
 	private final ToDoubleFunction< Map<String, Integer> > voteStrategy;
 	private final ToDoubleFunction< Map<String, List<Integer>> > commentStrategy;
-	private final Map<Long, Double> iterMap;
+	private final Map<Long, Double> iterationMap;
 	
 	private double postReward(double iteration, List<Action> actions) { //Only likes, dislikes and comments!
 		Common.notNull(actions);
@@ -55,7 +55,7 @@ final class RewardCalculator {
 		double total = rewAuth + rewCur;
 		this.rewAuth = rewAuth/total;
 		this.rewCur = rewCur/total;
-		this.iterMap = new HashMap<>();
+		this.iterationMap = new HashMap<>();
 		this.voteStrategy = (voteStrategy != null ? voteStrategy : voteSumStrategy);
 		this.commentStrategy = (commentStrategy != null ? commentStrategy : maxCpStrategy);
 	}
@@ -64,11 +64,11 @@ final class RewardCalculator {
 	
 	public Map<String, Double> computeReward(List<Action> actions){
 		
-		Map< Long, List<Action>> postActs = new HashMap<>(); //Azioni compiute su ogni post
-		Map< Long, Pair<String, Set<String>> > authsCurs = new HashMap<>(); // <autore, {curatori}>
-		Set<Long> deleted = new HashSet<>();
+		Map< Long, List<Action>> actsForPost = new HashMap<>(); //Azioni compiute su ogni post
+		Map< Long, Pair<String, Set<String>> > authCursForPost = new HashMap<>(); // <autore, {curatori}>
+		Set<Long> deletedPosts = new HashSet<>();
 		//eliminazione post
-		Map<String, Double> rewards = new HashMap<>(); //Rewards totali per ogni utente
+		Map<String, Double> rewardsForUser = new HashMap<>(); //Rewards totali per ogni utente
 		
 		Long idPost;
 		List<Action> list;
@@ -80,54 +80,58 @@ final class RewardCalculator {
 				
 				idPost = act.getIdPost();
 				
-				list = postActs.get(idPost);
-				if (list == null) { list = new ArrayList<>(); postActs.put(idPost, list); }
+				list = actsForPost.get(idPost);
+				if (list == null) { list = new ArrayList<>(); actsForPost.put(idPost, list); }
 				
-				pair = authsCurs.get(idPost);
+				pair = authCursForPost.get(idPost);
 				if (pair == null) {
 					pair = new Pair<String, Set<String>>(act.getAuthor(), new HashSet<>());
-					authsCurs.put(idPost, pair);
+					authCursForPost.put(idPost, pair);
 				}
 				
 				if (type == ActionType.LIKE || type == ActionType.DISLIKE || type == ActionType.COMMENT) {
 					list.add(act);
-					if (type != ActionType.DISLIKE) pair.getValue().add(act.getActor());
+					if (type != ActionType.DISLIKE && !act.getActor().equals(act.getAuthor()))
+						pair.getValue().add(act.getActor());
 				}
 				
-			} else deleted.add(act.getIdPost());
+			} else deletedPosts.add(act.getIdPost());
 		}
 		//Eliminazione post
-		for (long id : deleted) { iterMap.remove(id); postActs.remove(id); authsCurs.remove(id); }
+		for (long id : deletedPosts) { iterationMap.remove(id); actsForPost.remove(id); authCursForPost.remove(id); }
 		//Calcolo ricompense  e #iterazione per ogni post
-		for (long id : postActs.keySet()) {
+		for (long id : actsForPost.keySet()) {
 			
-			Double iter = iterMap.get(id);
+			Double iter = iterationMap.get(id);
 			iter = (iter != null ? iter + 1.0 : 1.0);
-			iterMap.put(id, iter);
+			iterationMap.put(id, iter);
 			
 			double prew, authrew, currew;
 			String author;
 			Set<String> curators;
-			prew = this.postReward(iter.doubleValue(), postActs.get(id));
+			prew = this.postReward(iter.doubleValue(), actsForPost.get(id));
 			if (prew > 0.0) {
-				pair = authsCurs.get(id);
+				pair = authCursForPost.get(id);
 				author = new String(pair.getKey());
 				curators = pair.getValue();
 				Common.allAndState(!curators.isEmpty());
+				/* Le ricompense sono generate dagli utenti diversi dall'autore del post che interagiscono
+				 * con lo stesso, quindi l'insieme dei curatori NON può essere vuoto!
+				 */
 				authrew = this.rewAuth * prew;
 				currew = (this.rewCur * prew) / ((double)curators.size());
 				//Ricompensa autore
-				if (rewards.containsKey(author)) authrew += rewards.get(author);
-				rewards.put(author, authrew);
+				if (rewardsForUser.containsKey(author)) authrew += rewardsForUser.get(author);
+				rewardsForUser.put(author, authrew);
 				//Ricompensa curatori
 				for (String cur : curators) {
 					double d = currew;
-					if (rewards.containsKey(cur)) d += rewards.get(cur);
-					rewards.put(new String(cur), d);
+					if (rewardsForUser.containsKey(cur)) d += rewardsForUser.get(cur);
+					rewardsForUser.put(new String(cur), d);
 				}
 			}
 		}
-		return rewards;
+		return rewardsForUser;
 	}
 	
 	public String toString() { return Common.jsonString(this); }
