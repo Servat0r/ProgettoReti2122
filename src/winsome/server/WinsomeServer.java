@@ -25,51 +25,82 @@ import winsome.server.action.*;
 import winsome.server.data.*;
 import winsome.util.*;
 
+/**
+ * Winsome server, implemented as a singleton.
+ * @author Salvatore Correnti
+ */
 public final class WinsomeServer implements AutoCloseable {
-	
+	/* Instancw of the server */
 	private static WinsomeServer server = null;
 	
+	/* No illegal state occurred */
 	private static final Pair<String, String> ILLSTATE_OK = new Pair<>(null, null);
-		
-	private static enum State { INIT, ACTIVE, CLOSED };
 	
+	/* States of the server */
+	private static enum State { INIT, ACTIVE, CLOSING, CLOSED };
+	
+	/* Workers pool constants */
 	private static final int
-		COREPOOLSIZE = Runtime.getRuntime().availableProcessors(),
-		MAXPOOLSIZE = 2 * COREPOOLSIZE,
-		KEEPALIVETIME = 60_000,
-		BUFFERCAP = 4096; //4 KB
+		DFLCOREPOOLSIZE = Runtime.getRuntime().availableProcessors(),
+		DFLMAXPOOLSIZE = 2 * DFLCOREPOOLSIZE,
+		DFLKEEPALIVETIME = 60_000,
+		DFLBUFFERCAP = 4096; //4 KB
 	
-	private static final TimeUnit KEEPALIVEUNIT = TimeUnit.MILLISECONDS;
+	private static final TimeUnit DFLKEEPALIVEUNIT = TimeUnit.MILLISECONDS;
+	
+	/* Default rewards percentages */
+	private static final double
+		DFLREWAUTH = 70.0,
+		DFLREWCURS = 30.0;
+	
+	public static final String
+		DFLSERVERHOST = "127.0.0.1",
+		DFLMCASTADDR = "239.255.32.32";
+	
+	public static final int
+		DFLTCPPORT = 6666,
+		DFLMCASTPORT = 44444,
+		DFLREGPORT = 7777;
 	
 	private static final String
 		LOGSTR = "SERVER @ %s: { %s : %s }",
 		ERRLOGSTR = "SERVER @ %s : ERROR @ %s : %s",
 		EMPTY = "";
 	
+	/* Static locks for a singleton instance */
 	private static final ReentrantLock
 		ILLSTATELOCK = new ReentrantLock(),
 		SERVERLOCK = new ReentrantLock();
 	
+	/* Default Exception handler for workers. */
 	static final BiConsumer<SelectionKey, Exception> DFLEXCHANDLER = (key, ex) -> {
 		Class<?> exClass = ex.getClass();
 		WinsomeServer server = WinsomeServer.getServer();
+		boolean logst = false;
 		if (server == null) return;
 		else if ( exClass.equals(IllegalArgumentException.class) ) { }
 		else if (exClass.equals(IllegalStateException.class)) {
 			Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 			server.signalIllegalState(ex);
-		} else { server.closeConnection(key); }
-		server.logger.logStackTrace(ex);
+			logst = true;
+		} else {
+			server.closeConnection(key);
+			if (exClass.equals(NullPointerException.class)) logst = true;
+		}
+		if (logst) server.logger().logStackTrace(ex);
+		else server.logger().log("Exception caught: %s: %s", exClass.getSimpleName(), ex.getMessage());
 	};
 	
 	public static final Type TYPE = new TypeToken<WinsomeServer>() {}.getType();
 	
+	/* Default jsons filenames */
 	public static final String
 		DFLSERVERJSON = "server.json",
 		DFLUSERJSON = "users.json",
 		DFLPOSTJSON = "posts.json",
 		DFLWALLETJSON = "wallets.json";
 	
+	/* Default name for the reward manager s*/
 	public static final String REWMANAGERNAME = "RewardManager";
 	
 	/* Connection state */
@@ -90,14 +121,17 @@ public final class WinsomeServer implements AutoCloseable {
 	private transient ConcurrentMap<SocketChannel, User> loggedMap; //Mappa ogni username con un channel
 	private transient Set<SocketChannel> unlogged; //Canali non mappati, su cui cioè nessun utente è loggato
 
+	/* Map from tags to users that have that tags */
 	private ConcurrentMap<String, NavigableSet<String>> tagsMap;
+	/* TCP connection data */
 	private String serverHost = null;
 	private int tcpPort = 0;
 	private transient InetSocketAddress tcpSockAddr = null;
 	private transient ServerSocketChannel tcpListener = null;
-
 	private int tcpTimeout = 0;
+	/* Local port of the multicast socket */
 	private int udpPort = 0;
+	
 	private transient Selector selector = null;
 	
 	/* Workers (elaborazione richieste -> prevedere un task per ognuna) */
@@ -105,7 +139,7 @@ public final class WinsomeServer implements AutoCloseable {
 	private transient ThreadFactoryImpl workersFactory;
 
 	private transient ExecutorService workers;
-
+	/* MessageBuffer capacity */
 	private int bufferCap;
 	/* Thread di calcolo ricompense ("writer" dell'actReg) + notifica client su multicast */
 	private String mcastAddr;
@@ -119,7 +153,7 @@ public final class WinsomeServer implements AutoCloseable {
 	/* Conversione in bitcoin */
 	private transient BitcoinService bitcoinService;
 	
-	/* "Database" (verrà serializzato a parte) */
+	/* "Database" */
 	private transient Table<String, User> users;
 	private transient Table<Long, Post> posts;
 	private transient Table<String, Wallet> wallets;
@@ -127,12 +161,25 @@ public final class WinsomeServer implements AutoCloseable {
 	/* RMI */
 	private transient Registry rmiReg;
 	private int regPort;
-	private transient ServerInterfaceImpl svHandler; //OK
-	
+	private transient ServerRMIImpl svHandler;
+	/* Id generator for the posts (restored after loading) */
 	private IDGen postGen;
 	
+	/** Maintains an indication of whether or not the system had come to an illegal state */
+	@NotNull
 	private Pair<String, String> illegalState;
 	
+	/**
+	 * Initializes a table by reading the given file and casting to the given type.
+	 * @param <T> Type of keys.
+	 * @param <V> Type of values.
+	 * @param filename Filename of the serialized data.
+	 * @param type Type of the resulting table.
+	 * @return A Table object deserialized on success, null on failure. NOTE: The elements
+	 *  of the table are NOT deserialized (i.e. their transient fields must be initialized).
+	 * @throws IOException On I/O errors.
+	 * @throws DeserializationException On table deserialization failure.
+	 */
 	private static <T extends Comparable<T>,V extends Indexable<T>> Table<T, V> initTable(String filename, Type type)
 		throws IOException, DeserializationException {
 		Table<T, V> table = null;
@@ -146,6 +193,19 @@ public final class WinsomeServer implements AutoCloseable {
 		return table;
 	}
 	
+	/**
+	 * Initializes JSON filenames for initializing transient fields.
+	 * @param serverJson JSON file for server.
+	 * @param userJson JSON file for users table.
+	 * @param postJson JSON file for posts table.
+	 * @param walletJson JSON file for wallets table.
+	 * @param users Users table.
+	 * @param posts Posts table.
+	 * @param wallets Wallets table.
+	 * @throws IOException On I/O errors.
+	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
+	 * @throws DeserializationException On failure when initializing transient fields of tables data.
+	 */
 	private void transientsInit(String serverJson, String userJson, String postJson, String walletJson, Table<String, User> users,
 		Table<Long, Post> posts, Table<String, Wallet> wallets)
 			throws IOException, AlreadyBoundException, DeserializationException {		
@@ -156,19 +216,33 @@ public final class WinsomeServer implements AutoCloseable {
 		this.transientsInit(users, posts, wallets);
 	}
 	
+	/**
+	 * Initializes server transient fields.
+	 * @param users Users table.
+	 * @param posts Posts table.
+	 * @param wallets Wallets table.
+	 * @throws IOException On I/O errors.
+	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
+	 * @throws DeserializationException On failure when initializing transient fields of tables data.
+	 */
 	private void transientsInit(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
 			throws IOException, AlreadyBoundException, DeserializationException {
 		if (postGen == null) this.postGen = new IDGen(1);
 		Post.setGen(postGen);
+		Map<Long, Double> iterationMap = new HashMap<>();
 		this.bitcoinService = new BitcoinService();
 		this.users = ( users != null ? users : new Table<String, User>() );
 		this.posts = (posts != null ? posts : new Table<Long, Post>() );
 		this.wallets = (wallets != null ? wallets : new Table<String, Wallet>() );
 		for (Wallet w : this.wallets.getAll()) { w.deserialize(); }
-		for (Post p : this.posts.getAll()) { p.deserialize(); }
+		for (Post p : this.posts.getAll()) {
+			p.deserialize();
+			iterationMap.putIfAbsent(p.key(), p.getIteration());
+		}
 		for (User u : this.users.getAll()) { u.deserialize(this.users, this.posts, this.wallets); }
 		PrintStream logStream = (logName != EMPTY ? new PrintStream(logName) : System.out);
 		this.logger = new Logger(LOGSTR, ERRLOGSTR, logStream);
+		logger.log(Common.jsonString(iterationMap));
 		this.tcpSockAddr = new InetSocketAddress(InetAddress.getByName(serverHost), tcpPort);
 		this.loggedMap = new ConcurrentHashMap<>();
 		this.unlogged = new HashSet<>();
@@ -182,7 +256,7 @@ public final class WinsomeServer implements AutoCloseable {
 			this.corePoolSize,
 			this.maxPoolSize,
 			this.keepAliveTime,
-			WinsomeServer.KEEPALIVEUNIT,
+			WinsomeServer.DFLKEEPALIVEUNIT,
 			new LinkedBlockingQueue<Runnable>(),
 			this.workersFactory,
 			new ThreadPoolExecutor.AbortPolicy()
@@ -191,21 +265,34 @@ public final class WinsomeServer implements AutoCloseable {
 		this.rewManager = new RewardManager(
 			this,
 			this.mcastAddr,
+			this.udpPort,
 			this.mcastPort,
 			this.wallets,
 			this.actReg,
 			this.rwAuthPerc,
-			this.rwCurPerc
+			this.rwCurPerc,
+			iterationMap
 		);
 		this.rewManager.setName(REWMANAGERNAME);
 		this.rewManager.setDaemon(true);
-		this.svHandler = new ServerInterfaceImpl(this);
+		this.svHandler = new ServerRMIImpl(this);
 		this.rmiReg = LocateRegistry.createRegistry(regPort);
-		this.rmiReg.bind(ServerInterface.REGSERVNAME, this.svHandler);
+		this.rmiReg.bind(ServerRMI.REGSERVNAME, this.svHandler);
 		
 		this.state = State.INIT;
 	}
 	
+	/**
+	 * Initializes non-transient fields of the server: this constructor is called by {@link #createServer(Map)}
+	 *  when there is no JSON data from which to initialize server.
+	 * @param configMap Configuration map.
+	 * @param users Users table.
+	 * @param posts Posts table.
+	 * @param wallets Wallets table.
+	 * @throws IOException On I/O errors.
+	 * @throws AlreadyBoundException By {@link #transientsInit(Table, Table, Table)}.
+	 * @throws DeserializationException By {@link #transientsInit(Table, Table, Table)}.
+	 */
 	private WinsomeServer(Map<String, String> configMap, Table<String, User> users, Table<Long, Post> posts,
 		Table<String, Wallet> wallets) throws IOException, AlreadyBoundException, DeserializationException {
 		Common.notNull(configMap);
@@ -218,42 +305,48 @@ public final class WinsomeServer implements AutoCloseable {
 		
 		Integer tmp;			
 		logName = ConfigUtils.setValueOrDefault(configMap, "logger", newStr, EMPTY);
-					
+		
 		serverJson = ConfigUtils.setValueOrDefault(configMap, "serverjson", newStr, DFLSERVERJSON);
 		userJson = ConfigUtils.setValueOrDefault(configMap, "userjson", newStr, DFLUSERJSON);
 		postJson = ConfigUtils.setValueOrDefault(configMap, "postjson", newStr, DFLPOSTJSON);
 		walletJson = ConfigUtils.setValueOrDefault(configMap, "walletjson", newStr, DFLWALLETJSON);
 		
-		serverHost = ConfigUtils.setValue(configMap, "server", newStr);
-		tcpPort = ConfigUtils.setValue(configMap, "tcpport", newInt);
-		udpPort = ConfigUtils.setValue(configMap, "udpport", newInt);
-		tcpTimeout = ConfigUtils.setValue(configMap, "tcptimeout", newInt);
+		serverHost = ConfigUtils.setValueOrDefault(configMap, "server", newStr, DFLSERVERHOST);
+		tcpPort = ConfigUtils.setValueOrDefault(configMap, "tcpport", newInt, DFLTCPPORT);
+		udpPort = ConfigUtils.setValueOrDefault(configMap, "udpport", newInt, 0);
+		tcpTimeout = ConfigUtils.setValueOrDefault(configMap, "tcptimeout", newInt, 0);
 		
-		tmp = ConfigUtils.setValueOrDefault(configMap, "corepoolsize", newInt, COREPOOLSIZE);
-		corePoolSize = (tmp >= 0 ? tmp : COREPOOLSIZE);
+		tmp = ConfigUtils.setValueOrDefault(configMap, "corepoolsize", newInt, DFLCOREPOOLSIZE);
+		corePoolSize = (tmp >= 0 ? tmp : DFLCOREPOOLSIZE);
 		
-		tmp = ConfigUtils.setValueOrDefault(configMap, "maxpoolsize", newInt, MAXPOOLSIZE);
-		maxPoolSize = (tmp >= 0 ? tmp : MAXPOOLSIZE);
+		tmp = ConfigUtils.setValueOrDefault(configMap, "maxpoolsize", newInt, DFLMAXPOOLSIZE);
+		maxPoolSize = (tmp >= 0 ? tmp : DFLMAXPOOLSIZE);
 		
-		tmp = ConfigUtils.setValueOrDefault(configMap, "keepalivetime", newInt, KEEPALIVETIME);
-		keepAliveTime = (tmp >= 0 ? tmp : KEEPALIVETIME);
-					
-		tmp = ConfigUtils.setValueOrDefault(configMap, "buffercap", newInt, BUFFERCAP);
-		bufferCap = (tmp >= 0 ? tmp : BUFFERCAP);
+		tmp = ConfigUtils.setValueOrDefault(configMap, "keepalivetime", newInt, DFLKEEPALIVETIME);
+		keepAliveTime = (tmp >= 0 ? tmp : DFLKEEPALIVETIME);
 		
-		regPort = ConfigUtils.setValue(configMap, "regport", newInt);
-		mcastPort = ConfigUtils.setValue(configMap, "mcastport", newInt);
-		mcastAddr = ConfigUtils.setValue(configMap, "multicast", newStr);
-		rewPeriod = ConfigUtils.setValue(configMap, "rwperiod", newLong);
-		rwAuthPerc = ConfigUtils.setValue(configMap, "rwauthperc", newDouble);
-		rwCurPerc = ConfigUtils.setValue(configMap, "rwcurperc", newDouble);
-		rewUnit = ConfigUtils.setValue(configMap, "rwperiodunit", newTimeUnit);
+		tmp = ConfigUtils.setValueOrDefault(configMap, "buffercap", newInt, DFLBUFFERCAP);
+		bufferCap = (tmp >= 0 ? tmp : DFLBUFFERCAP);
+		
+		regPort = ConfigUtils.setValueOrDefault(configMap, "regport", newInt, DFLREGPORT);
+		mcastPort = ConfigUtils.setValueOrDefault(configMap, "mcastport", newInt, DFLMCASTPORT);
+		mcastAddr = ConfigUtils.setValueOrDefault(configMap, "multicast", newStr, DFLMCASTADDR);
+		rewPeriod = ConfigUtils.setValueOrDefault(configMap, "rwperiod", newLong, 1L);
+		rwAuthPerc = ConfigUtils.setValueOrDefault(configMap, "rwauthperc", newDouble, DFLREWAUTH);
+		rwCurPerc = ConfigUtils.setValueOrDefault(configMap, "rwcurperc", newDouble, DFLREWCURS);
+		rewUnit = ConfigUtils.setValueOrDefault(configMap, "rwperiodunit", newTimeUnit, TimeUnit.SECONDS);
 		
 		tagsMap = new ConcurrentHashMap<>();
 		illegalState = WinsomeServer.ILLSTATE_OK;
 		this.transientsInit(users, posts, wallets);
 	}
-
+	
+	/**
+	 * Creates the single-instance server.
+	 * @param configMap Configuration map.
+	 * @return true on success, false on error.
+	 * @throws Exception
+	 */
 	public static boolean createServer(Map<String, String> configMap) throws Exception {
 		Common.notNull(configMap);
 		try {
@@ -288,12 +381,21 @@ public final class WinsomeServer implements AutoCloseable {
 			return true;
 		} finally { WinsomeServer.SERVERLOCK.unlock(); }
 	}
-
+	
+	/** @return The single instance of the server if any, otherwise null. */
 	public static WinsomeServer getServer() {
 		try { WinsomeServer.SERVERLOCK.lock(); return server; }
 		finally { WinsomeServer.SERVERLOCK.unlock(); }
 	}
 
+	/**
+	 * Server mainloop.
+	 * @return A pair (true, message) on success, a pair (false, message) on success. The message is to be
+	 *  printed by main method when exiting.
+	 * @throws IllegalStateException If signalled by another thread or for invalid flags for a SelectionKey.
+	 * @throws NullPointerException If thrown by called methods.
+	 * @throws IOException On I/O errors.
+	 */
 	@NotNull
 	public Pair<Boolean, String> mainloop() throws IllegalStateException, NullPointerException, IOException {
 		synchronized (this) {
@@ -315,11 +417,15 @@ public final class WinsomeServer implements AutoCloseable {
 			
 			try { selected = selector.select(); }
 			catch (ClosedSelectorException cse) { break; }
-			illegalState = this.getIllegalState();
-			if ( !illegalState.equals(ILLSTATE_OK) ) {
-				String message = String.format("%s : %s", illegalState.getKey(), illegalState.getValue());
-				throw new IllegalStateException(message);
-			} else if (selected > 0) {
+			finally {
+				illegalState = this.getIllegalState();
+				if ( !illegalState.equals(ILLSTATE_OK) ) {
+					String message = String.format("%s : %s", illegalState.getKey(), illegalState.getValue());
+					throw new IllegalStateException(message);
+				}
+			}
+			if (state == State.CLOSING) break;
+			else if (selected > 0) {
 				logger.log("Selected %d key(s)", selected);
 				keysIter = selector.selectedKeys().iterator();
 				while (keysIter.hasNext()) {
@@ -353,18 +459,24 @@ public final class WinsomeServer implements AutoCloseable {
 						if (!sent || idCode.equals(Message.QUIT) || idCode.equals(Message.EXIT))
 							{ this.closeConnection(selectKey); }
 						else selectKey.interestOps(SelectionKey.OP_READ);
-					} else throw new IllegalStateException();
+					} else throw new IllegalStateException("Unknown key state");
 				}
 			}
 		}
 		return new Pair<>(true, "Successful execution");
 	}
-
+	
 	Long checkIdPost(String str) {
 		try { return Long.parseLong(str); } catch (NumberFormatException ex) { return null; }
 	}
 		
-	void signalIllegalState(Exception ex) { //String exName, String msg) {
+	/**
+	 * Signals the occurring of an Exception that brings the system to an illegal state
+	 *  in a thread different from the one executing mainloop() by writing Exception name
+	 *   and Exception message in {@link #illegalState}.
+	 * @param ex The Exception for signalling data.
+	 */
+	void signalIllegalState(Exception ex) {
 		try {
 			ILLSTATELOCK.lock();
 			String exName = ex.getClass().getSimpleName(), msg = ex.getMessage();
@@ -374,11 +486,20 @@ public final class WinsomeServer implements AutoCloseable {
 		} finally { ILLSTATELOCK.unlock(); }
 	}
 	
+	/**
+	 * Get the current value of {@link #illegalState}.
+	 * @return
+	 */
 	Pair<String, String> getIllegalState() {
 		try { ILLSTATELOCK.lock(); return illegalState; }
 		finally { ILLSTATELOCK.unlock(); }
 	}
 	
+	/**
+	 * Closes a TCP connection with a client after a successful quit request
+	 *  or an IO error when communicating with it.
+	 * @param key SelectionKey corresponding to the client.
+	 */
 	void closeConnection(SelectionKey key) {
 		SocketChannel client = (SocketChannel) key.channel();
 		try {
@@ -389,6 +510,11 @@ public final class WinsomeServer implements AutoCloseable {
 		} catch (IOException ioe) { throw new IllegalStateException(); }
 	}
 	
+	/**
+	 * @param client SocketChannel.
+	 * @return The name of the user that is communicating with given channel
+	 *  if anyone is logged in, otherwise null.
+	 */
 	String translateChannel(SocketChannel client) {
 		Common.notNull(client);
 		User u = loggedMap.get(client);
@@ -396,16 +522,25 @@ public final class WinsomeServer implements AutoCloseable {
 		else return null;
 	}
 	
+	/**
+	 * Formats a channel into a standard string printable for logging.
+	 * @param client SocketChannel.
+	 * @return Formatted string containing remote IP and port.
+	 */
+	@NotNull
 	String formatChannel(SocketChannel client) {
 		Common.notNull(client);
 		Socket sock = client.socket();
 		return String.format("(%s:%d)", sock.getInetAddress(), sock.getPort());
 	}
-
-	//void log(String format, Object ...objs) { this.logger.log(format, objs); }
 	
-	//void logStackTrace(Exception ex) { this.logger.logStackTrace(ex); }
-	
+	/**
+	 * Registers a new user to the network.
+	 * @param username Username.
+	 * @param password Password.
+	 * @param tags List of tags.
+	 * @return A pair (true, message) on success, a pair (false, message) on error.
+	 */
 	@NotNull
 	Pair<Boolean, String> register(String username, String password, List<String> tags) {
 		User user = User.newUser(username, password, users, posts, wallets, tags);
@@ -422,6 +557,12 @@ public final class WinsomeServer implements AutoCloseable {
 		return new Pair<>(true, "Registrazione avvenuta con successo!");
 	}
 	
+	/**
+	 * Login.
+	 * @param skey Selection key.
+	 * @param args List of args as {username, password}.
+	 * @return A Message object to send back to the client.
+	 */
 	@NotNull
 	Message login(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
@@ -448,6 +589,12 @@ public final class WinsomeServer implements AutoCloseable {
 		}
 	}
 	
+	/**
+	 * Logout.
+	 * @param skey Selection key.
+	 * @param args List of args as {username}.
+	 * @return A Message object to send back to the client.
+	 */
 	@NotNull
 	Message logout(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
@@ -468,6 +615,11 @@ public final class WinsomeServer implements AutoCloseable {
 		}
 	}
 	
+	/**
+	 * List of users currently following.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
 	@NotNull
 	Message listFollowing(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
@@ -477,6 +629,11 @@ public final class WinsomeServer implements AutoCloseable {
 		return Message.newList(following, ServerUtils.OK);
 	}
 	
+	/**
+	 * List of users with a tag in common.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
 	@NotNull
 	Message listUsers(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
@@ -496,6 +653,12 @@ public final class WinsomeServer implements AutoCloseable {
 		return Message.newList(result, ServerUtils.OK);
 	}
 	
+	/**
+	 * Follow user.
+	 * @param skey Selection key.
+	 * @param args List of args as {username}.
+	 * @return A Message object to send back to the client.
+	 */
 	@NotNull
 	Message followUser(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
@@ -509,10 +672,7 @@ public final class WinsomeServer implements AutoCloseable {
 		int res = User.addFollower(follower, followed);
 		if (res == 0) {
 			try {
-				
-				if ( svHandler.isRegistered(followed.key()) && 
-					!svHandler.addFollower(follower.key(), followed.key(), follower.tags()) ) {
-					
+				if (!svHandler.addFollower(follower.key(), followed.key(), follower.tags()) ) {
 					return Message.newError(ServerUtils.INTERROR);
 				} else return Message.newOK(ServerUtils.OK);
 				
@@ -524,6 +684,12 @@ public final class WinsomeServer implements AutoCloseable {
 		else return Message.newError(ServerUtils.INTERROR);
 	}
 	
+	/**
+	 * Unfollow user.
+	 * @param skey Selection key.
+	 * @param args List of args as {username}.
+	 * @return A Message object to send back to the client.
+	 */
 	@NotNull
 	Message unfollowUser(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
@@ -537,6 +703,7 @@ public final class WinsomeServer implements AutoCloseable {
 				if ( !svHandler.removeFollower(follower.key(), followed.key()) ) {
 					return Message.newError(ServerUtils.INTERROR);
 				} else return Message.newOK(ServerUtils.OK);
+				
 			} catch (RemoteException rex) {
 				logger.logStackTrace(rex);
 				return Message.newError(ServerUtils.INTERROR);
@@ -545,7 +712,12 @@ public final class WinsomeServer implements AutoCloseable {
 		else return Message.newError(ServerUtils.INTERROR);
 	}
 	
-	
+	/**
+	 * View blog.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message viewBlog(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		User user = loggedMap.get(client);
@@ -553,6 +725,13 @@ public final class WinsomeServer implements AutoCloseable {
 		else return Message.newList(user.getBlog(), ServerUtils.OK);
 	}
 	
+	/**
+	 * Create a post.
+	 * @param skey Selection key.
+	 * @param args List of args as {title, content}.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message createPost(SelectionKey skey, List<String> args) throws InterruptedException {
 		SocketChannel client = (SocketChannel)skey.channel();
 		String title = args.get(0), content = args.get(1);
@@ -561,12 +740,23 @@ public final class WinsomeServer implements AutoCloseable {
 		String author = new String(user.key());
 		Action a = Action.newCreatePost(author);
 		this.actReg.putAction(a);
-		long idPost = user.createPost(title, content);
-		a.setIdPost(idPost);
-		this.actReg.endAction(a);
-		return Message.newOK("Post creato correttamente (id = %d)", idPost);
+		try {
+			long idPost = user.createPost(title, content);
+			a.setIdPost(idPost);
+			this.actReg.endAction(a);
+			return Message.newOK("Post creato correttamente (id = %d)", idPost);
+		} catch (DataException de) {
+			this.actReg.abortAction(a);
+			return Message.newError(ServerUtils.INTERROR);
+		}
 	}
 	
+	/**
+	 * Show feed.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message showFeed(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		User user = loggedMap.get(client);
@@ -575,6 +765,13 @@ public final class WinsomeServer implements AutoCloseable {
 		return Message.newList(feed, Message.OK);
 	}
 	
+	/**
+	 * Show feed.
+	 * @param skey Selection key.
+	 * @param args List of args as {idPost}.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message showPost(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		long idPost;
@@ -584,10 +781,22 @@ public final class WinsomeServer implements AutoCloseable {
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
 		List<String> posts;
-		try { posts = user.getPost(idPost); return Message.newPost(posts, Message.OK); }
+		try {
+			posts = user.getPost(idPost);
+			Common.allAndState(posts.size() >= 4);
+			String title = posts.remove(0), content = posts.remove(0);
+			String likes = posts.remove(0), dislikes = posts.remove(0);
+			return Message.newPost(title, content, likes, dislikes, posts, Message.OK); }
 		catch (DataException de) { return Message.newError(de.getMessage()); }
 	}
 	
+	/**
+	 * Delete post.
+	 * @param skey Selection key.
+	 * @param args List of args as {idPost}.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message deletePost(SelectionKey skey, List<String> args) throws InterruptedException {
 		SocketChannel client = (SocketChannel)skey.channel();
 		long idPost;
@@ -612,6 +821,13 @@ public final class WinsomeServer implements AutoCloseable {
 	}
 	
 	
+	/**
+	 * Rewin post.
+	 * @param skey Selection key.
+	 * @param args List of args as {idPost}.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message rewinPost(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		long idPost;
@@ -633,6 +849,13 @@ public final class WinsomeServer implements AutoCloseable {
 	}
 	
 	
+	/**
+	 * Rate post.
+	 * @param skey Selection key.
+	 * @param args List of args as {idPost, vote}.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message ratePost(SelectionKey skey, List<String> args) throws InterruptedException {
 		SocketChannel client = (SocketChannel)skey.channel();
 		long idPost;
@@ -667,6 +890,13 @@ public final class WinsomeServer implements AutoCloseable {
 		}
 	}
 	
+	/**
+	 * Add comment.
+	 * @param skey Selection key.
+	 * @param args List of args as {idPost, content}.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message addComment(SelectionKey skey, List<String> args) throws InterruptedException {
 		SocketChannel client = (SocketChannel)skey.channel();
 		long idPost;
@@ -699,6 +929,12 @@ public final class WinsomeServer implements AutoCloseable {
 		}
 	}
 	
+	/**
+	 * Get wallet in wincoin.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message getWallet(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		User user = loggedMap.get(client);
@@ -710,6 +946,12 @@ public final class WinsomeServer implements AutoCloseable {
 		} finally { }
 	}
 	
+	/**
+	 * Get wallet in bitcoin and wincoin.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message getWalletInBitcoin(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		User user = loggedMap.get(client);
@@ -724,6 +966,12 @@ public final class WinsomeServer implements AutoCloseable {
 		finally { }
 	}
 		
+	/**
+	 * Quit request.
+	 * @param skey Selection key.
+	 * @return A Message object to send back to the client.
+	 */
+	@NotNull
 	Message quitReq(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
 		if (loggedMap.containsKey(client)) return Message.newError(ServerUtils.PERMDEN + ": " + ServerUtils.U_STILL_LOGGED);
@@ -735,8 +983,29 @@ public final class WinsomeServer implements AutoCloseable {
 	
 	protected final Selector selector() { return selector; }
 	
+	/**
+	 * Update the iteration fields of the posts still alive.
+	 * @param map Map idPost -> iteration num.
+	 * @return true on success, false otherwise.
+	 */
+	protected final boolean updateIters(Map<Long, Double> map) {
+		Common.notNull(map);
+		Post p;
+		for (long id : map.keySet()) {
+			p = posts.get(id);
+			if (p == null) return false;
+			else p.setIteration(map.get(id));
+		}
+		return true;
+	}
+	
 	protected final Logger logger() { return logger; }
 	
+	/**
+	 * Serializes server data into 4 JSON files: one for the server, one for the users,
+	 *  one for the posts and one for the wallets.
+	 * @throws IllegalStateException If thrown by called methods.
+	 */
 	private void serialize() throws IllegalStateException {
 		Gson gson = Serialization.GSON;
 		logger.log("Serializing on (%s, %s, %s, %s)", userJson, postJson, walletJson, serverJson);
@@ -778,10 +1047,9 @@ public final class WinsomeServer implements AutoCloseable {
 			gson.toJson(this, WinsomeServer.TYPE, serverWriter);
 		} catch (IOException ioe) { ioe.printStackTrace(err); throw new IllegalStateException(); }
 */	}
-		
 	
 	public synchronized void close() throws Exception {
-		if (state == State.ACTIVE) {
+		if (state == State.ACTIVE || state == State.CLOSING) {
 			this.state = State.CLOSED;
 			
 			selector.close();
@@ -794,7 +1062,7 @@ public final class WinsomeServer implements AutoCloseable {
 			tcpListener.close();
 			logger.log("TCP Listener closed");
 			
-			try { rmiReg.unbind(ServerInterface.REGSERVNAME); }
+			try { rmiReg.unbind(ServerRMI.REGSERVNAME); }
 			catch (Exception ex) { Debug.debugExc(ex); }
 			logger.log("RMI Registry closed");
 			

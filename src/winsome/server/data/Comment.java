@@ -3,13 +3,15 @@ package winsome.server.data;
 import winsome.annotations.NotNull;
 import winsome.util.Common;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import com.google.gson.reflect.TypeToken;
 
+/**
+ * Comments in Winsome.
+ * @author Salvatore Correnti
+ */
 public final class Comment implements Comparable<Comment> {
-
+	
 	public static final Type TYPE = new TypeToken<Comment>() {}.getType();
 	
 	@NotNull
@@ -17,9 +19,15 @@ public final class Comment implements Comparable<Comment> {
 	@NotNull
 	private final long idPost, time;
 	
+	/**
+	 * Creates a new comment.
+	 * @param idAuthor Name of the author of the comment.
+	 * @param idPost Id of the post of the comment.
+	 * @param content Content of comment.
+	 */
 	public Comment(String idAuthor, long idPost, String content) {
 		Common.notNull(idAuthor, content);
-		Common.andAllArgs(idPost > 0, content.length() > 0);
+		Common.allAndArgs(idPost > 0, content.length() > 0);
 		this.idAuthor = idAuthor;
 		this.idPost = idPost;
 		this.content = content;
@@ -42,22 +50,6 @@ public final class Comment implements Comparable<Comment> {
 	public long getIdPost() { return idPost; }
 	public String getContent() { return content; }
 	public long getTime() { return time; }
-
-	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append( this.getClass().getSimpleName() + " [");
-		Field[] fields = this.getClass().getDeclaredFields();
-		boolean first = false;
-		Object currObj;
-		for (int i = 0; i < fields.length; i++) {
-			Field f = fields[i];
-			if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-				try { currObj = f.get(this); } catch (IllegalAccessException ex) { continue; }
-				sb.append( (first ? ", " : "") + f.getName() + " = " + currObj );
-				if (!first) first = true;
-			}
-		}
-		sb.append("]");
-		return sb.toString();
-	}
+	
+	public String toString() { return Common.jsonString(this); }
 }

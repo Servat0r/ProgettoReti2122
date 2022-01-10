@@ -1,15 +1,22 @@
 package winsome.server.data;
 
-import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.locks.*;
 
 import winsome.annotations.NotNull;
-import winsome.util.Common;
+import winsome.util.*;
 
+/**
+ * A class for "indexing" items in a table.
+ * @author Salvatore Correnti
+ *
+ * @param <T> Type of key.
+ * @param <V> type of item.
+ */
 public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		
-	private final NavigableSet<T> keys; //TODO Mutable
+	@NotNull
+	private final NavigableSet<T> keys;
 	private transient Table<T, V> table;
 	private transient ReentrantReadWriteLock lock;
 	
@@ -19,9 +26,14 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		this.table = table;
 		this.lock = new ReentrantReadWriteLock();
 	}
-
+	
 	public synchronized boolean isDeserialized() { return (table != null && lock != null); }
 	
+	/**
+	 * Restores transient fields after deserialization from JSON.
+	 * @param table Table from which to update maintained keys.
+	 * @throws DeserializationException If table is not already deserialized.
+	 */	
 	public synchronized void deserialize(Table<T, V> table) throws DeserializationException {
 		Common.notNull(table);
 		if (!table.isDeserialized()) throw new DeserializationException();
@@ -30,6 +42,10 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		if (lock == null) lock = new ReentrantReadWriteLock();
 	}
 	
+	/**
+	 * @param key The key.
+	 * @return The item in the table with the given key if present, null otherwise.
+	 */
 	public V get(T key) {
 		Common.notNull(key);
 		try {
@@ -37,7 +53,12 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 			return (keys.contains(key) ? this.table.get(key) : null);
 		} finally { lock.readLock().unlock(); }
 	}
-		
+	
+	/**
+	 * Tries to add the given key to the set of keys of the index.
+	 * @param key The key.
+	 * @return true on success, false otherwise.
+	 */
 	public boolean add(T key) {
 		Common.notNull(key);
 		try {
@@ -46,11 +67,20 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		} finally { lock.writeLock().unlock(); }
 	}
 	
+	/**
+	 * @param key The key.
+	 * @return true if {@link #keys} contains key, false otherwise.
+	 */
 	public boolean contains(T key) {
 		Common.notNull(key);
 		try {lock.readLock().lock(); return this.keys.contains(key);} finally {lock.readLock().unlock();}
 	}
 	
+	/**
+	 * Attempts to remove the given key from the maintained keys of this index.
+	 * @param key The key to remove.
+	 * @return true if the key was contained in {@link #keys} and removed, false otherwise.
+	 */
 	public boolean remove(T key) {
 		Common.notNull(key);
 		try {
@@ -59,6 +89,10 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 		} finally {lock.writeLock().unlock();}
 	}
 	
+	/**
+	 * @return A set of all items in the associated table whose key is contained in {@link #keys},
+	 *  and automatically updates it eliminating the other ones as specified in {@link Table#get(SortedSet)}.
+	 */
 	@NotNull
 	public NavigableSet<V> getAll(){
 		NavigableSet<V> result = new TreeSet<>();
@@ -70,12 +104,14 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 	}
 	
 	
+	/** @return An unmodifiable set containing all the keys of this index. */
 	@NotNull
 	public NavigableSet<T> unmodifiableKeySet(){
 		try {lock.readLock().lock(); return Collections.unmodifiableNavigableSet(this.keys);}
 		finally {lock.readLock().unlock();}
 	}
 	
+	/** @return A modifiable set containing all the keys of this index. */
 	@NotNull
 	public NavigableSet<T> keySet(){
 		NavigableSet<T> result = new TreeSet<>();
@@ -87,25 +123,6 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 	}
 	
 	public boolean equals(Object obj) { return (this == obj); }
-
-	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append( this.getClass().getSimpleName() + " [");
-		try {
-			lock.readLock().lock();
-			Field[] fields = this.getClass().getDeclaredFields();
-			boolean first = false;
-			Object currObj;
-			for (int i = 0; i < fields.length; i++) {
-				Field f = fields[i];
-				if ( (f.getModifiers() & Modifier.STATIC) == 0 ) {
-					try {currObj = f.get(this); } catch (Exception ex) { continue; }
-					sb.append( (first ? ", " : "") + f.getName() + " = " + currObj );
-					if (!first) first = true;
-				}
-			}
-			sb.append("]");
-			return sb.toString();
-		} finally { lock.readLock().unlock(); }
-	}
+	
+	public String toString() { return Common.jsonString(this); }
 }

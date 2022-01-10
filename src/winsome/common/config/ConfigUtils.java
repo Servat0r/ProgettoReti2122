@@ -7,6 +7,11 @@ import java.util.function.Function;
 
 import winsome.util.Common;
 
+/**
+ * Utilities for processing a configuration map returned e.g. by {@link ConfigParser#parseFile(String)}.
+ * @author Salvatore Correnti
+ * @see ConfigParser
+ */
 public final class ConfigUtils {
 
 	private ConfigUtils() {}
@@ -44,11 +49,18 @@ public final class ConfigUtils {
 			{throw new IllegalArgumentException(Common.excStr(str + " is not a correct file for output stream!")); } 
 	};
 	
+	/**
+	 * If configMap contains the given key, applies the given function to the corresponding value and returns it,
+	 *  otherwise returns a default value. Used in {@link winsome.client.WinsomeClient} and {@link winsome.client.WinsomeServer}
+	 *  for parsing configuration map.
+	 * @param <T> Type of the return value.
+	 * @param configMap Configuration map.
+	 * @param keyName The key.
+	 * @param fun Transformation function.
+	 * @param defVal Default value if key is absent.
+	 * @return Transformed value if key is present, default value otherwise.
+	 */
 	public static final <T> T setValueOrDefault(Map<String, String> configMap, String keyName, Function<String, T> fun, T defVal) {
 		String cval = configMap.get(keyName); return (cval != null ? fun.apply(cval) : defVal);
-	}
-
-	public static final <T> T setValue(Map<String, String> configMap, String keyName, Function<String, T> fun) {
-		return setValueOrDefault(configMap, keyName, fun, null);
 	}
 }

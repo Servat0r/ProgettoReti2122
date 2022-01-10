@@ -8,12 +8,11 @@ import winsome.util.Common;
 
 /**
  * This class defines methods for parsing a configuration text file into a Map object. 
- * Syntax is defined like this:
+ *  Syntax is defined like this:
  * 	a comment line starts with a '#';
- * 	an assignment is of the form: identifier = value, where "identifier" is an alphanumeric sequence starting
- * 	with a letter and allowing '_' and '.' from the second character.
+ * 	an assignment is of the form: identifier = value, where "identifier" is an alphanumeric
+ * 	sequence starting with a letter and allowing '_' and '.' from the second character.
  * @author Salvatore Correnti
- *
  */
 public final class ConfigParser {
 
@@ -35,11 +34,11 @@ public final class ConfigParser {
 	
 	/**
 	 * Parses the content of a text file into a Map<String, String> object, where the values parsed for the
-	 * keys may be modified according to the flags passed.
+	 *  keys may be modified according to the flags passed.
 	 * @param filename (Relative) path of file.
 	 * @param flags Flags given to modify keys.
 	 * @return A Map<String, String> object containing couples <key : value> for each "key = value" assignment
-	 * line on success, null on error.
+	 *  line on success, null on error.
 	 * @throws FileNotFoundException Thrown by FileInputStream constructor.
 	 * @throws IOException Thrown by FileInputStream closing.
 	 * @throws ConfigParsingException If a syntax error occurs while parsing.
@@ -67,14 +66,24 @@ public final class ConfigParser {
 					else if (flags == LOWER) key = key.toLowerCase();
 					String value = Common.strip( nextLine.substring(m.end()) ).substring(EQ.length());
 					value = Common.strip(value);
-					if (result.containsKey(key)) throw new ConfigParsingException("Line " + currentLine + ": Key already defined: '" + key + "'");
+					if (result.containsKey(key))
+						throw new ConfigParsingException(Common.excStr("Line %d: Key already defined: '%s'", currentLine, key));
 					else result.put( new String(key), new String(value) );
-				} else throw new ConfigParsingException("Line " + currentLine + ": Syntax error: '" + nextLine + "'");
+				} else throw new ConfigParsingException(Common.excStr("Line %d: Syntax error: '%s'", currentLine, nextLine));
 			}
 			return result;
 		}
 	}
 	
+	/**
+	 * Parses the content of a text file into a Map<String, String> object.
+	 * @param filename (Relative) path of file.
+	 * @return A Map<String, String> object containing couples <key : value> for each "key = value" assignment
+	 *  line on success, null on error.
+	 * @throws FileNotFoundException Thrown by FileInputStream constructor.
+	 * @throws IOException Thrown by FileInputStream closing.
+	 * @throws ConfigParsingException If a syntax error occurs while parsing.
+	 */
 	public static final Map<String, String> parseFile(String filename) throws FileNotFoundException, IOException, ConfigParsingException {
 		return parseFile(filename, 0);
 	}

@@ -10,8 +10,16 @@ import winsome.annotations.NotNull;
 import winsome.util.Common;
 import winsome.util.Serialization;
 
-public class Table<T extends Comparable<T>, V extends Indexable<T>> implements Iterable<V> {
+/**
+ * A class representing a table of objects indexed by a unique "key", inspired from a database table.
+ * @author Salvatore Correnti
+ *
+ * @param <T> Type of the key.
+ * @param <V> Type of the objects.
+ */
+public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	
+	@NotNull
 	private final NavigableMap<T, V> map;
 	private transient ReentrantReadWriteLock lock = null;
 	private transient Type type = null;
@@ -22,19 +30,13 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		this.type = new TypeToken<Table<T,V>>(){}.getType();
 	}
 	
-	
-	public V put(V elem) {
-		Common.notNull(elem);
-		T key = elem.key();
-		V oldVal = null;
-		try {
-			lock.writeLock().lock();
-			if (this.contains(key)) oldVal = this.map.remove(key);
-			this.map.put(key, elem);
-			return oldVal;
-		} finally { lock.writeLock().unlock(); }
-	}
-		
+	/**
+	 * Puts the given element in the table if absent, otherwise returns the already existing
+	 *  element with that key.
+	 * @param elem The element to add.
+	 * @return null if the element was absent, the already existing element as above otherwise.
+	 * @throws NullPointerException If elem == null.
+	 */
 	public boolean putIfAbsent(V elem) {
 		Common.notNull(elem);
 		T key = elem.key();
@@ -44,6 +46,10 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		} finally { lock.writeLock().unlock(); }
 	}
 	
+	/**
+	 * @param key The key.
+	 * @return The element with the given key if present, null otherwise.
+	 */
 	public V get(T key) {
 		Common.notNull(key);
 		try {
@@ -52,6 +58,12 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		} finally { lock.readLock().unlock(); }
 	}
 	
+	/**
+	 * @param key The key.
+	 * @return The index in the table of the element with the given key
+	 *  if present, -1 otherwise.
+	 * @throws NullPointerException If key == null.
+	 */
 	public int index(T key) {
 		Common.notNull(key);
 		try {
@@ -66,6 +78,12 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		} finally { lock.readLock().unlock(); }
 	}
 	
+	/**
+	 * Removes the element with the given key from the table.
+	 * @param key The key.
+	 * @return The element with the given key if present, null otherwise.
+	 * @throws NullPointerException If key == null.
+	 */
 	public V remove(T key) {
 		Common.notNull(key);
 		try {
@@ -74,21 +92,36 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		} finally { lock.writeLock().unlock(); }
 	}
 	
+	/**
+	 * @return An unmodifiable view of the set of keys of the elements stored in the table.
+	 */
 	@NotNull
 	public Set<T> keySet(){
 		try { lock.readLock().lock(); return this.map.keySet(); } finally { lock.readLock().unlock(); }
 	}
 	
+	/**
+	 * @return An unmodifiable view of the set of values of the elements stored in the table.
+	 */
 	@NotNull
 	public Collection<V> getAll(){
 		try { lock.readLock().lock(); return this.map.values(); } finally { lock.readLock().unlock(); }
 	}
 	
+	/**
+	 * @param key Given key.
+	 * @return true if the table contains an element with given key.
+	 * @throws NullPointerException If key == null.
+	 */
 	public boolean contains(T key) {
 		Common.notNull(key);
 		try { lock.readLock().lock(); return this.map.containsKey(key); } finally { lock.readLock().unlock(); }
 	}
 	
+	/**
+	 * Restores transient fields after deserialization from JSON.
+	 * @throws DeserializationException On failure.
+	 */
 	public synchronized void deserialize() throws DeserializationException {
 		if (lock == null) lock = new ReentrantReadWriteLock();
 		if (type == null) type = new TypeToken<Table<T,V>>(){}.getType();
@@ -96,6 +129,13 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 	
 	public synchronized boolean isDeserialized() { return (lock != null && type != null); }
 	
+	/**
+	 * @param ext Sorted set of keys.
+	 * @param retain If true, removes from ext all the keys that do not have a corresponding
+	 *  element in the table.
+	 * @return A sorted set of all the elements contained in the table such that their
+	 *  key is contained in ext.
+	 */
 	@NotNull
 	public NavigableSet<V> get(SortedSet<T> ext, boolean retain) {
 		Common.notNull(ext);
@@ -111,6 +151,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		} finally { lock.readLock().unlock(); }
 	}
 	
+	/** The same as {@link #get(SortedSet, boolean)} but with the second parameter as true. */
 	@NotNull
 	public NavigableSet<V> get(SortedSet<T> ext){ return this.get(ext, true); }
 	
@@ -123,5 +164,9 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> implements I
 		} finally { if (lock != null) lock.readLock().unlock(); }
 	}
 	
-	public Iterator<V> iterator() { return this.map.values().iterator(); }
+	/** @return An iterator over the keys in the table, in ascending order. */
+	public Iterator<T> keysIterator() { return this.map.keySet().iterator(); }
+
+	/** @return An iterator over the values in the table, in ascending order (by key). */
+	public Iterator<V> valuesIterator() { return this.map.values().iterator(); }
 }

@@ -36,7 +36,7 @@ public final class MessageBuffer {
 	 * @param bufCap Capacity of the buffer (positive).
 	 */
 	public MessageBuffer(int bufCap) {
-		Common.positive(bufCap); /* NON è possibile allocare buffer di capacità 0 */
+		Common.allAndArgs(bufCap >= 0); /* NON è possibile allocare buffer di capacità 0 */
 		this.buffer = ByteBuffer.allocate(bufCap);
 		this.state = State.INIT;
 	}
@@ -156,7 +156,7 @@ public final class MessageBuffer {
 	}
 
 	/**
-	 * Resetta il buffer allo stato INIT.
+	 * Resets the buffer to the state INIT.
 	 */
 	public void clear() {
 		this.buffer.clear();
@@ -204,12 +204,10 @@ public final class MessageBuffer {
 	 * Reads data from ReadableByteChannel chan and sets state to WRITTEN.
 	 * @param chan Input channel.
 	 * @return Number of read bytes on success, -1 if EOS is reached.
-	 * @throws If {@link ReadableByteChannel#read(ByteBuffer)} throws an IOException for a connection reset.
-	 * @throws IOException If another I/O error occurs.
+	 * @throws IOException If an I/O error occurs.
 	 * @throws IllegalArgumentException If (chan == null).
 	 */
 	public int readFromChannel(ReadableByteChannel chan) throws IOException {
-		IOException ex = null;
 		Common.notNull(chan);
 		int result = 0;
 		if (this.state == State.READ) {
@@ -217,40 +215,27 @@ public final class MessageBuffer {
 			this.buffer.limit(this.buffer.capacity());
 		}
 		this.state = State.WRITTEN;
-		try { result = chan.read(this.buffer); }
-		catch (IOException ioe) {
-			if (Common.isConnReset(ioe)) ex = new ConnResetException();
-			else ex = new IOException(ioe.getMessage(), ioe.getCause());
-		}
-		if (ex != null) throw ex;
+		result = chan.read(this.buffer);
 		return result;
 	}
 	
 	/**
 	 * Writes data in [position, limit) on WritableByteChannel chan, sets state to READ and if specified
-	 * compacts remaining data.
+	 *  compacts remaining data.
 	 * @param chan Output channel.
 	 * @param compact If true after writing the buffer is compacted.
 	 * @return Number of written bytes if state is different from INIT, -1 otherwise.
-	 * @throws ConnResetException If {@link java.nio.channels.WritableByteChannel#write(ByteBuffer)}
-	 * throws an IOException for a connection reset by another peer (server, client etc.).
-	 * @throws IOException If another I/O error occurs.
+	 * @throws IOException If an I/O error occurs.
 	 * @throws IllegalArgumentException If (chan == null).
 	 */
 	public int writeToChannel(WritableByteChannel chan, boolean compact) throws IOException {
 		Common.notNull(chan);
-		IOException ex = null;
 		int result = 0;
 		if (this.state == State.INIT) result = -1; /* Non c'� niente da scrivere! */
 		else { 
 			if (this.state == State.WRITTEN) this.buffer.flip(); //position = 0, limit = old_position
 			this.state = State.READ; /* Indipendentemente dal risultato della write! */
-			try { result = chan.write(this.buffer); }
-			catch (IOException ioe) {
-				if (Common.isConnReset(ioe)) ex = new ConnResetException();
-				else ex = new IOException(ioe.getMessage(), ioe.getCause());
-			}
-			if (ex != null) throw ex;
+			result = chan.write(this.buffer);
 			if (compact) this.compact();
 		}
 		return result;
@@ -260,9 +245,7 @@ public final class MessageBuffer {
 	 * Writes data in [position, limit) on WritableByteChannel chan, sets state to READ and compacts remaining data.
 	 * @param chan Output channel.
 	 * @return Number of written bytes if state is different from INIT, -1 otherwise.
-	 * @throws ConnResetException If {@link java.nio.channels.WritableByteChannel#write(ByteBuffer)}
-	 * throws an IOException for a connection reset by another peer (server, client etc.).
-	 * @throws IOException If another I/O error occurs.
+	 * @throws IOException If an I/O error occurs.
 	 * @throws IllegalArgumentException If (chan == null).
 	 */
 	public int writeToChannel(WritableByteChannel chan) throws IOException { return this.writeToChannel(chan, true); }
@@ -273,11 +256,12 @@ public final class MessageBuffer {
 	 * @param offset First position in the array from which to read data.
 	 * @param length Maximum number of readable bytes from array.
 	 * @return Number of bytes copied in the buffer, -1 if it is not possible to copy data in the buffer 
-	 * (see implementation).
-	 * @throws IllegalArgumentException If (array == null) or (offset < 0) or (length <= 0) or (offset >= array.length).
+	 *  (see implementation).
+	 * @throws IllegalArgumentException If (array == null) or (offset < 0) or (length <= 0) or
+	 *  (offset >= array.length).
 	 */
 	public int readFromArray(byte[] array, int offset, int length) {
-		Common.andAllArgs(array != null, offset >= 0, length >= 0, offset < array.length);
+		Common.allAndArgs(array != null, offset >= 0, length >= 0, offset < array.length);
 		int maxCopy = Math.min(length, array.length - offset);
 		int copied = 0;
 		if (this.state == State.READ) {
@@ -293,17 +277,17 @@ public final class MessageBuffer {
 	
 	/**
 	 * Writes data in the buffer ([0, position) if state is WRITTEN, [position, limit) if state is READ)
-	 * in array from offset for at most length bytes, and if specified compacts remaining data at the end.
+	 *  in array from offset for at most length bytes, and if specified compacts remaining data at the end.
 	 * @param array Byte array in which to write data.
 	 * @param offset First position in the array in which to write.
 	 * @param length Max number of writable bytes.
 	 * @param compact If true, at the end of writing compacts the buffer.
 	 * @return The number of bytes written to array if state is different from INIT, -1 otherwise.
 	 * @throws IllegalArgumentException Se avviene almeno una delle seguenti: 
-	 * array == null, length < 0, offset < 0, length > array.length, offset > array.length.
+	 *  array == null, length < 0, offset < 0, length > array.length, offset > array.length.
 	 */
 	public int writeToArray(byte[] array, int offset, int length, boolean compact) {
-		Common.andAllArgs(array != null, length >= 0, offset >= 0, length <= array.length, offset <= array.length);
+		Common.allAndArgs(array != null, length >= 0, offset >= 0, length <= array.length, offset <= array.length);
 		int maxCopy = Math.min(length, array.length - offset);
 		if (maxCopy == 0) return 0;
 		if (this.state == State.INIT) return -1;
@@ -319,26 +303,24 @@ public final class MessageBuffer {
 
 	/**
 	 * Writes data in the buffer ([0, position) if state is WRITTEN, [position, limit) if state is READ)
-	 * in array from offset for at most length bytes and compacts remaining data at the end.
+	 *  in array from offset for at most length bytes and compacts remaining data at the end.
 	 * @param array Byte array in which to write data.
 	 * @param offset First position in the array in which to write.
 	 * @param length Max number of writable bytes.
 	 * @return The number of bytes written to array if state is different from INIT, -1 otherwise.
 	 * @throws IllegalArgumentException If it happens at least one of: 
-	 * array == null, length < 0, offset < 0, length > array.length, offset > array.length.
+	 *  array == null, length < 0, offset < 0, length > array.length, offset > array.length.
 	 */
 	public int writeToArray(byte[] array, int offset, int length) { return this.writeToArray(array, offset, length, true); } 
 	
 	/**
-	 * Reads all data contained in array to the buffer and flushes the buffer to the channel chan each time
-	 * the buffer becomes full, and if specified flushes the buffer at the end (thus writes ALL data in array
-	 * to chan).
+	 * Reads all data contained in array to the buffer and flushes the buffer to the channel chan
+	 *  each time the buffer becomes full, and if specified flushes the buffer at the end (thus
+	 *  writes ALL data in array to chan).
 	 * @param array Array from which to read bytes.
 	 * @param chan Output channel.
 	 * @param flush If true, flushes buffer at the end.
-	 * @throws ConnResetException If {@link #writeToChannel(WritableByteChannel, boolean)} throws an IOException
-	 * for a connection reset by peer.
-	 * @throws IOException If another I/O occurs.
+	 * @throws IOException If an I/O occurs.
 	 * @throws IllegalArgumentException If (array == null) or (chan == null).
 	 */
 	public void readAllFromArray(byte[] array, WritableByteChannel chan, boolean flush) throws IOException {
@@ -353,13 +335,11 @@ public final class MessageBuffer {
 	}
 	
 	/**
-	 * Reads all data contained in array to the buffer and flushes the buffer to the channel chan each time
-	 * the buffer becomes full and at the end.
+	 * Reads all data contained in array to the buffer and flushes the buffer to the channel
+	 *  chan each time the buffer becomes full and at the end.
 	 * @param array Array from which to read bytes.
 	 * @param chan Output channel.
-	 * @throws ConnResetException If {@link #writeToChannel(WritableByteChannel, boolean)} throws an IOException
-	 * for a connection reset by peer.
-	 * @throws IOException If another I/O occurs.
+	 * @throws IOException If an I/O occurs.
 	 * @throws IllegalArgumentException If (array == null) or (chan == null).
 	 */
 	public void readAllFromArray(byte[] array, WritableByteChannel chan) throws IOException {
@@ -371,15 +351,13 @@ public final class MessageBuffer {
 	 * @param length Max length of returned array.
 	 * @param chan The channel from which to read bytes.
 	 * @return A byte array of at most length bytes on success, such that if the EOS is reached,
-	 * all of them would be written to array, null on failure.
-	 * NOTE: A return value < length indicates that EOS has been reached.
-	 * @throws ConnResetException If {@link #readFromChannel(ReadableByteChannel)} throws an IOException
-	 * for a connection closed by other peer.
-	 * @throws IOException If another I/O error occurs.
+	 *  all of them would be written to array, null on failure.
+	 *  NOTE: A return value < length indicates that EOS has been reached.
+	 * @throws IOException If an I/O error occurs.
 	 * @throws IllegalArgumentException If (length <= 0) or (chan == null).
 	 */
 	public byte[] writeAllToArray(int length, ReadableByteChannel chan) throws IOException {
-		Common.positive(length); Common.notNull(chan);
+		Common.allAndArgs(length >= 0); Common.notNull(chan);
 		byte[] result = new byte[length];
 		int bRead = this.remaining(), index = 0;
 		int cRead = 0;

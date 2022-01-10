@@ -4,12 +4,20 @@ import java.util.*;
 
 import winsome.util.*;
 
+/**
+ * This class models a parsed commands, containing the actual id, param and arguments already checked
+ *  and (string-)manipulated (if necessary).
+ * @author Salvatore Correnti
+ * @see CommandParser
+ * @see CommandDef
+ * @see CommandArgs
+ */
 public final class Command {
 	
 	public static final String EMPTY = "";
 	public static final Command
-		SKIP = new Command(EMPTY, EMPTY, null),
-		NULL = new Command(EMPTY, null, null);
+		SKIP = new Command(EMPTY, "skip", Common.toList()), /* A command representing a blank line */
+		NULL = new Command(EMPTY, "null", Common.toList()); /* A command representing no match found */
 	
 	private final String id;
 	private final String param;
@@ -18,9 +26,9 @@ public final class Command {
 	public Command(String id, String param, List<String> args) {
 		Common.notNull(id);
 		this.id = id;
-		this.param = param;
+		this.param = (param != null ? param : Command.EMPTY);
 		this.args = new ArrayList<>();
-		if (args != null) { for (String arg : args) this.args.add(arg); }
+		if (args != null) { Common.collectionNotNull(args); this.args.addAll(args); }
 	}
 	
 	public final String getId() { return id; }

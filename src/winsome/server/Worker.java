@@ -7,7 +7,13 @@ import java.util.function.BiConsumer;
 import winsome.common.msg.*;
 import winsome.util.*;
 
-//Legge e interpreta una richiesta proveniente dal client, la esegue e risponde al client medesimo
+/**
+ * Worker task for server workers pool. This task reads a message from a SocketChannel,
+ *  processes it and wakes up server selector. On Exception, an Exception handler
+ *  provided by the server handles the Exception.
+ * @author Salvatore Correnti
+ * @see WinsomeServer
+ */
 final class Worker implements Runnable {
 	
 	private final SelectionKey skey;
@@ -33,14 +39,12 @@ final class Worker implements Runnable {
 		try {
 			String id = null, param = null;
 			this.buf = new MessageBuffer(server.bufferCap());
-			try {
-				msg = Message.recvFromChannel(client, buf);
-				id = msg.getIdStr();
-				param = msg.getParamStr(); //Cannot throw MessageException
-				String u = server.translateChannel(client);
-				String msgstr = (u != null ? "Received request from user " + u : "Received request from anonymous user ");
-				server.logger().log("%s: it is (%s, %s - %s)", msgstr, id, param, msg.getArguments().toString());
-			} catch (MessageException mex) { mex.printStackTrace(); }
+			msg = Message.recvFromChannel(client, buf);
+			id = msg.getIdStr();
+			param = msg.getParamStr(); //Cannot throw MessageException
+			String u = server.translateChannel(client);
+			String msgstr = (u != null ? "Received request from user " + u : "Received request from anonymous user ");
+			server.logger().log("%s: it is (%s, %s - %s)", msgstr, id, param, msg.getArguments().toString());
 			List<String> args = msg.getArguments();
 			msg = null;
 			switch(id) {
@@ -86,10 +90,7 @@ final class Worker implements Runnable {
 			skey.attach(msg);
 			skey.interestOps(SelectionKey.OP_WRITE);
 			server.selector().wakeup();
-		} catch (Exception ex) {
-			server.logger().logStackTrace(ex);
-			excHandler.accept(skey, ex);
-		}
+		} catch (Exception ex) { excHandler.accept(skey, ex); }
 	}
 	
 	public String toString() { return Common.jsonString(this); }

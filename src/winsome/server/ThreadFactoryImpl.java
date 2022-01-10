@@ -5,6 +5,12 @@ import java.util.concurrent.ThreadFactory;
 
 import winsome.util.IDGen;
 
+/**
+ * Custom implementation of thread factory for {@link WinsomeServer} workers pool.
+ * It provides a list for tracking all generated threads and methods for interrupt them all and join them all.
+ * @author Salvatore Correnti
+ * @see WinsomeServer
+ */
 final class ThreadFactoryImpl implements ThreadFactory {
 
 	private final IDGen gen = new IDGen(1);
@@ -19,6 +25,7 @@ final class ThreadFactoryImpl implements ThreadFactory {
 		return t;
 	}
 	
+	/** Interrupts all alive workers (used in server for interrupt suspended workers) */
 	public synchronized final void interruptAll() {
 		Iterator<Thread> iter = workers.iterator();
 		Thread t;
@@ -28,7 +35,8 @@ final class ThreadFactoryImpl implements ThreadFactory {
 		}
 	}
 	
+	/** Joins all alive workers (used in server to guarantee to wait for termination of all workers) */
 	public synchronized final void joinAll() throws InterruptedException {
 		for (Thread t : workers) t.join();
-	}	
+	}
 }

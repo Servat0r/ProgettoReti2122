@@ -1,22 +1,40 @@
 package winsome.client;
 
+import winsome.annotations.NotNull;
 import winsome.util.*;
 
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
+/**
+ * Client wallet multicast notifier service.
+ * @author Salvatore Correnti
+ * @see WinsomeClient
+ */
 final class ClientWalletNotifier extends Thread implements Closeable {
 
+	@NotNull
 	private final InetAddress mcastIP;
+	@NotNull	
 	private MulticastSocket socket;
+	@NotNull
 	private byte[] buffer;
+	/** Notifying messages queue (shared with client). */
+	@NotNull
 	private LinkedBlockingQueue<String> notifies;
+	@NotNull
 	private WinsomeClient client;
 	
-	
+	/**
+	 * @param client Referral client.
+	 * @param port Multicast port.
+	 * @param mcastAddr Multicast address.
+	 * @param msgLen Length of the notify message.
+	 * @throws IOException On I/O errors.
+	 */
 	public ClientWalletNotifier(WinsomeClient client, int port, String mcastAddr, int msgLen) throws IOException {
-		Common.notNull(client, mcastAddr); Common.andAllArgs(port >= 0, msgLen > 0);
+		Common.notNull(client, mcastAddr); Common.allAndArgs(port >= 0, msgLen > 0);
 		this.client = client;
 		this.mcastIP = InetAddress.getByName(mcastAddr);
 		if (!this.mcastIP.isMulticastAddress()) {
@@ -57,7 +75,6 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 			}
 		}
 	}
-	
-	
+		
 	public void close() throws IOException { this.socket.close(); }	
 }

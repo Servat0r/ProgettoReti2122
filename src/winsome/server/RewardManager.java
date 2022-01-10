@@ -10,6 +10,11 @@ import winsome.util.*;
 import winsome.annotations.NotNull;
 import winsome.server.action.*;
 
+/**
+ * Reward management service. This class handles rewards calculations and client multicast notifies.
+ * @author Salvatore Correnti
+ * @see RewardCalculatorImpl
+ */
 final class RewardManager extends Thread {
 	
 	private static final double TOTREWPERC = 100.0;
@@ -22,7 +27,7 @@ final class RewardManager extends Thread {
 	private InetAddress address;
 	private transient Table<String, Wallet> wallets;
 	private ActionRegistry registry;
-	private RewardCalculator calculator;
+	private RewardCalculator<Integer, List<Integer>> calculator;
 	private State state;
 	
 	private DatagramPacket buildPacket() {
@@ -36,24 +41,32 @@ final class RewardManager extends Thread {
 	 * 1. Crea il socket di multicast e invia le notifiche lì
 	 * 2. Aggiorna i portafogli degli utenti.
 	 */
-	public RewardManager(WinsomeServer server, String mcastAddr, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
-		double rewAuth, double rewCur) throws IOException {
+	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
+		double rewAuth, double rewCur, Map<Long, Double> iterationMap) throws IOException {
 		
 		Common.notNull(server, mcastAddr, wallets, registry);
-		Common.andAllArgs(mcastPort >= 0, rewAuth >= 0.0, rewCur >= 0, rewAuth + rewCur == TOTREWPERC);
-		socket = new MulticastSocket(mcastPort);
+		Common.allAndArgs(mcastPort >= 0, rewAuth >= 0.0, rewCur >= 0, rewAuth + rewCur == TOTREWPERC);
+		socket = new MulticastSocket(socketPort);
 		address = InetAddress.getByName(mcastAddr);
 		state = State.INIT;
 		this.server = server;
 		this.mcastPort = mcastPort;
 		this.wallets = wallets;
 		this.registry = registry;
-		this.calculator = new RewardCalculator(rewAuth, rewCur);
+		this.calculator = new RewardCalculatorImpl(rewAuth, rewCur, iterationMap);
 	}
 	
 	
+	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort,
+		Table<String, Wallet> wallets, Pair<Long, TimeUnit> pair, double rwAuthPerc, double rwCurPerc,
+		Map<Long, Double> iterationMap) throws IOException {
+		this(server, mcastAddr, socketPort, mcastPort, wallets, new ActionRegistry(pair), rwAuthPerc,
+			rwCurPerc, iterationMap);
+	}
+
 	public void run() {
-		server.logger().log("RewardManager service started");
+		Logger logger = server.logger();
+		logger.log("RewardManager service started");
 		int time = 1;
 		try {
 			state = State.OPEN;
@@ -64,12 +77,14 @@ final class RewardManager extends Thread {
 				WinsomeServer.getServer().signalIllegalState(se);
 				return;
 			}
+			
 			InetSocketAddress mcastaddr = new InetSocketAddress(address, mcastPort);
 			socket.joinGroup(mcastaddr, net);
 			Common.allAndState(registry.open());
 			List<Action> completed = new ArrayList<>();
 			Map<String, Double> rewards;
 			DatagramPacket packet;
+			
 			while (!this.isClosed()) {
 				if (registry.getActions(completed)) {
 					rewards = calculator.computeReward(completed);
@@ -79,22 +94,25 @@ final class RewardManager extends Thread {
 					}
 					packet = buildPacket();
 					socket.send(packet);
-					server.logger().log("Reward update notify sent (#%d time)", time);
+					logger.log("Reward update notify sent (#%d time)", time);
 					time++;
 				} else if (!this.isClosed()) throw new IllegalStateException();
 				completed.clear();
 			}
 			socket.leaveGroup(mcastaddr, net);
 		} catch (Exception ex) {
-			server.logger().logStackTrace(ex);
+			logger.logStackTrace(ex);
 			if (ex.getClass().equals(IllegalStateException.class)) server.signalIllegalState(ex);
-		} finally { socket.close(); registry.close(); server.logger().log("RewardManager service ended"); }
-	}
-	
-	public RewardManager(WinsomeServer server, String mcastAddr, int mcastPort,
-		Table<String, Wallet> wallets, Pair<Long, TimeUnit> pair, int rwAuthPerc, int rwCurPerc)
-		throws IOException {
-		this(server, mcastAddr, mcastPort, wallets, new ActionRegistry(pair), rwAuthPerc, rwCurPerc);
+		} finally {
+			socket.close();
+			registry.close();
+			logger.log("Registry closed");
+			if ( !server.updateIters(((RewardCalculatorImpl)calculator).getIterationMap()) ) {
+				logger.log("Failed to update posts iteration");
+				server.signalIllegalState(new DataException());
+			} else logger.log("Posts iterations updated");
+			logger.log("RewardManager service ended");
+		}
 	}
 	
 	public boolean isClosed() { synchronized (state) { return (state == State.CLOSED); } }

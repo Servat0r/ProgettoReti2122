@@ -1,5 +1,10 @@
 package winsome.util;
 
+/**
+ * A synchronized long id generator.
+ * @author Amministratore
+ *
+ */
 public final class IDGen {
 	
 	private long id;

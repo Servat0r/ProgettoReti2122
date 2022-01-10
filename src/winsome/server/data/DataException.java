@@ -1,5 +1,10 @@
 package winsome.server.data;
 
+/**
+ * Checked Exception for cases in which an operation on data (users, posts, comments, wallets) fails.
+ * @author Salvatore Correnti.
+ *
+ */
 public final class DataException extends Exception {
 
 	private static final long serialVersionUID = -4251074604690913841L;
@@ -13,7 +18,8 @@ public final class DataException extends Exception {
 		NOT_IN_FEED = "Post is not in current user feed",
 		NOT_AUTHOR = "Current User is not the author of the post",
 		SAME_AUTHOR = "Current User is the author of the post",
-		POST_NEXISTS = "No existing post with given id"; 
+		POST_NEXISTS = "No existing post with given id",
+		POST_NULLGEN = "Id generator of the posts is NULL";
 	
 	public static final String
 		UNRETRIEVE_HISTORY = "Unable to retrieve wallet history",
@@ -31,5 +37,4 @@ public final class DataException extends Exception {
 	public DataException(Throwable cause) { super(cause); }
 
 	public DataException(String message, Throwable cause) { super(message, cause); }
-
 }

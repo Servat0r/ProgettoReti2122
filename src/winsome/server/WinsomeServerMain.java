@@ -5,8 +5,12 @@ import java.util.Map;
 import winsome.common.config.ConfigParser;
 import winsome.util.*;
 
-final class WinsomeServerMain {
-
+/**
+ * Main class for {@link WinsomeServer}.
+ * @author Salvatore Correnti
+ */
+public final class WinsomeServerMain {
+	/* Default config filename */
 	public static final String CONFIG = "serverConfig.txt";
 	
 	public static void main(String[] args) {
@@ -20,18 +24,25 @@ final class WinsomeServerMain {
 		try {
 			Map<String, String> configMap = ConfigParser.parseFile(config, ConfigParser.LOWER);
 			if (WinsomeServer.createServer(configMap) && (server = WinsomeServer.getServer()) != null) {
-				t = new Thread(new CtrlCHandler(server));
-				t.setName(CtrlCHandler.DFLNAME);
+				t = new Thread(new ShutdownHook());
+				t.setName(ShutdownHook.DFLNAME);
 				Runtime.getRuntime().addShutdownHook(t);
 				result = server.mainloop();
 				exitCode = (result.getKey() ? 0 : 1);
 			} else exitCode = 1;
-		} catch (Exception ex) { Debug.debugExc(ex); exitCode = 1; }
-		finally {
-			try { t.join(); } catch (Exception ex) { Debug.debugExc(ex); }
-			finally {
-				System.out.println(result.getValue());
-				System.out.printf("Main exiting with code %d%n", exitCode);
+		} catch (Exception ex) { 
+			if (server != null) server.logger().logStackTrace(ex);
+			else ex.printStackTrace();
+			exitCode = 1;
+		} finally {
+			try { t.join(); }
+			catch (Exception ex) {
+				if (server != null) server.logger().logStackTrace(ex);
+				else ex.printStackTrace();
+				exitCode = 1;
+			} finally {
+				System.out.printf("%s%nMain exiting with code: %d%n", result.getValue(), exitCode);
+				System.out.flush();
 				Debug.exit(exitCode);
 			}
 		}

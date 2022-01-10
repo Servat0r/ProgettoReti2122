@@ -1,21 +1,26 @@
 package winsome.server;
 
 import java.lang.reflect.Type;
-import java.util.List;
-import java.util.function.BiPredicate;
-import java.util.function.Predicate;
+import java.util.*;
+import java.util.function.*;
 
 import com.google.gson.reflect.TypeToken;
 
-import winsome.server.data.Post;
-import winsome.server.data.Table;
-import winsome.server.data.User;
-import winsome.server.data.Wallet;
-import winsome.util.Common;
+import winsome.server.data.*;
+import winsome.util.*;
 
+/**
+ * Common server-related constants.
+ * @author Salvatore Correnti
+ * @see WinsomeServer
+ */
 public final class ServerUtils {
 
-	//TODO Stringhe dei messaggi di risposta
+	public static final String
+		LIKE = "+1",
+		DISLIKE = "-1";	
+	
+	/* Stringhe dei messaggi di risposta */
 	protected static final String
 		//Generals
 		OK = "OK",
@@ -57,39 +62,57 @@ public final class ServerUtils {
 		//Bitcoin wallet
 		BTC_CONV = "Errore durante la conversione del portafoglio in bitcoin";
 	
-	private static final Predicate<String> testLong = (str) -> {
+	private static final boolean testLong(String str){
 		Common.notNull(str);
 		try { Long.parseLong(str); return true; }
 		catch (Exception ex) { return false; }
-	};
+	}
 	
-	private static final BiPredicate<String, Integer> testTitleComm = (str, len) -> {
-		String str2 = Common.dequote(str);
-		return (str2.length() <= len);
-	};
+	private static final boolean testTitleComm(String str, int len) {
+		Common.allAndArgs(str != null, len >= 0);
+		return (str.length() <= len);
+	}
 	
-	private static final Predicate<String> testRate = (str) -> { return (str.equals("+1") || str.equals("-1")); };
+	private static final boolean testRate(String str) {
+		Common.notNull(str);
+		return (str.equals("+1") || str.equals("-1"));
+	}
 	
+	/* Default checkers for client command parser. */
 	public static final Predicate<List<String>>
-		postTest = (list) -> { //post <title> <comment>
+		/* Checker for post <title> <comment> command */
+		postTest = (list) -> {
 			if (list.size() != 2) return false;
 			else {
+				Debug.println(list);
 				String title = list.get(0), content = list.get(1);
-				return testTitleComm.test(title, 20) && testTitleComm.test(content, 500);
+				title = Common.dequote(title); content = Common.dequote(content);
+				title = title.replace("\\\"", "\""); content = content.replace("\\\"", "\"");
+				//All dequoted
+				Debug.println(title);
+				Debug.println(content);
+				list.set(0, title); list.set(1, content);
+				Debug.println(list);
+				return testTitleComm(title, 20) && testTitleComm(content, 500);
 			}
 		},
-		
-		numTest = (list) -> { return (list.size() == 1 ? testLong.test(list.get(0)) : false); },
-		
-		rateTest = (list) -> { //rate <idPost> <vote>
-			return (list.size() == 2) && testLong.test(list.get(0)) && testRate.test(list.get(1));
+		/* Commands with a single numeric argument */
+		numTest = (list) -> { return (list.size() == 1 ? testLong(list.get(0)) : false); },
+		/* rate <idPost> <vote> */
+		rateTest = (list) -> {
+			return (list.size() == 2) && testLong(list.get(0)) && testRate(list.get(1));
 		},
-		
-		commentTest = (list) -> { //comment <idPost> <text>
-			return list.size() == 2 && testLong.test(list.get(0));
+		/* comment <idPost> <text> */
+		commentTest = (list) -> {
+			if (list.size() != 2) return false;
+			Debug.println(list);
+			String comment = Common.dequote(list.get(1));
+			comment = comment.replace("\\\"", "\"");
+			list.set( 1, comment);
+			return testLong(list.get(0));
 		};
 	
-	
+	/* TypeTokens for server tables */
 	protected static final Type
 		USERSTYPE = new TypeToken< Table<String, User> >() {}.getType(),
 		POSTSTYPE = new TypeToken< Table<Long, Post> >(){}.getType(),

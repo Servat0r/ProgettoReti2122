@@ -1,6 +1,6 @@
 # File di configurazione del server
 # Indirizzo del server
-SERVER		=	192.168.1.120
+# SERVER	=	192.168.1.120
 
 # Porta TCP del server
 TCPPORT		=	6666
@@ -32,16 +32,16 @@ USERJSON	=	users.json
 POSTJSON	=	posts.json
 
 # Periodo di calcolo ricompense
-RWPERIOD	=	10
+RWPERIOD	=	30.0
 
 # TimeUnit per il periodo di calcolo ricompense
 RWPERIODUNIT	=	SECONDS
 
 # Percentuale ricompensa autore (0-100)
-RWAUTHPERC	=	70
+RWAUTHPERC	=	70.0
 
 # Percentuale ricompensa curatori (0-100)
-RWCURPERC	=	30
+RWCURPERC	=	30.0
 
 # Numero di core threads del pool (se < 0, settato automaticamente al numero di processori disponibili)
 COREPOOLSIZE	=	-1

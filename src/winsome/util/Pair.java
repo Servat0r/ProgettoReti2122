@@ -3,6 +3,13 @@ package winsome.util;
 import java.io.Serializable;
 import java.util.Objects;
 
+/**
+ * A pair of objects.
+ * @author Salvatore Correnti
+ *
+ * @param <K> Type of the first object.
+ * @param <V> Type of the second object.
+ */
 public final class Pair<K,V> implements Serializable {
 	
 	private static final long serialVersionUID = 1L;

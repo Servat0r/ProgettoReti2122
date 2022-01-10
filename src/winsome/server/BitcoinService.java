@@ -5,33 +5,33 @@ import java.net.*;
 import java.util.*;
 
 import winsome.util.Common;
-
+/**
+ * Wincoin -> Bitcoin conversion service.
+ * @author Salvatore Correnti
+ * @see WinsomeServer
+ */
 final class BitcoinService {
 
 	private static final int
-		DFLTIMEOUT = 5000,
-		MINDECIMAL = 1,
-		MAXDECIMAL = 20,
-		DFLDECIMALS = 4;
+		DFLTIMEOUT = 5000, /* Default timeout for http request. */
+		MINDECIMAL = 1, /* Minimum number of decimals for number generation */
+		MAXDECIMAL = 20, /* Maximum number of decimals for number generation */
+		DFLDECIMALS = 4; /* Default number of decimals */
 	
 	private static final String
 		URLSTR = "https://www.random.org/decimal-fractions/?num=1&dec=%d&col=1&format=plain&rnd=new";
 		
 	private final URL url;
 	
-	public BitcoinService(int decimals, PrintStream err) throws MalformedURLException {
-		Common.andAllArgs(decimals >= MINDECIMAL, decimals <= MAXDECIMAL);
+	public BitcoinService(int decimals) throws MalformedURLException {
+		Common.allAndArgs(decimals >= MINDECIMAL, decimals <= MAXDECIMAL);
 		String str = String.format(URLSTR, decimals);
 		this.url = new URL(str);
 	}
-	
-	public BitcoinService(int decimals) throws MalformedURLException { this(decimals, null); }
-	
-	public BitcoinService(PrintStream err) throws MalformedURLException { this(DFLDECIMALS, err); }
-	
+		
 	public BitcoinService() throws MalformedURLException { this(DFLDECIMALS); }
 	
-	public synchronized final Double convert(double value) throws IOException {
+	public final Double convert(double value) throws IOException {
 		URLConnection conn;
 		conn = url.openConnection();
 		conn.setReadTimeout(DFLTIMEOUT);
@@ -50,7 +50,7 @@ final class BitcoinService {
 		return value * exc;
 	}
 	
-	public synchronized final Double convert(String strvalue) throws IOException {
+	public final Double convert(String strvalue) throws IOException {
 		Common.notNull(strvalue);
 		try {
 			double value = Double.parseDouble(strvalue);

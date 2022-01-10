@@ -1,5 +1,10 @@
 package winsome.common.config;
 
+/**
+ * Checked Exception thrown when a syntax error occurs while parsing a configuration file.
+ * @author Salvatore Correnti
+ * @see ConfigParser
+ */
 public final class ConfigParsingException extends Exception {
 
 	private static final long serialVersionUID = -7885513207117893768L;

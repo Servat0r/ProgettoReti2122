@@ -23,8 +23,21 @@ import winsome.util.*;
  * length(msg) = (4 +) 12 + 4 * msg.argN + Sum_(i=0..(argN-1))(length(arguments[i]))
  */
 
+/**
+ * This class represents a message exchangeable among client and server.
+ * A message is made up by:
+ *	- an identifier of the request ({@link #idCode});
+ *	- a parameter of the request ({@link #paramCode});
+ *	- a variable number of "arguments" represented by strings.
+ *  This class is used both by {@link winsome.client.WinsomeClient} and {@link winsome.server.WinsomeServer}
+ *  for exchanging messages on their TCP connection, and supports message transferral over both
+ *  channels and streams.
+ * @author Salvatore Correnti
+ * @see MessageBuffer
+ */
 public final class Message {
 	
+	/* Error messages */
 	public static final String
 	INV_ID_BYTE = "Invalid identifier: '%d'",
 	INV_PARAM_BYTE = "Invalid param: '%s'",
@@ -32,42 +45,40 @@ public final class Message {
 	INV_PARAM_STR = "Invalid param: '%s'",
 	UNKNOWN_MSG = "Unknwown message";
 	
+	/* Identifier strings (some of them are also used as parameters for response messages (OK/ERR)) */
 	public static final String
-		OK = "ok", /* Operazione con successo + eventuali risultati */
-		ERR = "error", /* Errore + indicazione sintassi/processing + eventuali argomenti */
-		FWLIST = "fwersList", /* Lista di followers (fornita dopo la login) */
-		MCAST = "multicast", /* Indirizzi di multicast (fornita dopo la login) */
-		REG = "register", /* Richiesta di registrazione */
-		LOGIN = "login", /* Richiesta di login */	
-		LOGOUT = "logout",
-		LIST = "list",
+		OK = "ok", /* Successful operation */
+		ERR = "error", /* Error */
+		REG = "register", /* Register */
+		LOGIN = "login", /* Login */	
+		LOGOUT = "logout", /* Logout */
+		LIST = "list", /* List (users/followers/following); OK param for sending users/following/blog/feed */
 		FOLLOW = "follow",
 		UNFOLLOW = "unfollow",
 		BLOG = "blog",
-		POST = "post",
+		POST = "post", /* Also used as OK param for sending post data and as SHOW param for requesting post data */
 		SHOW = "show",
 		DELETE = "delete",
 		REWIN = "rewin",
 		RATE = "rate",
 		COMMENT = "comment",
-		WALLET = "wallet",
+		WALLET = "wallet", /* Also used as OK param for sending wallet data */
 		HELP = "help",
-		QUIT = "quit",
-		EXIT = "exit";
+		QUIT = "quit", EXIT = "exit"; /* Also used as OK params for sending confirmation messages for regular client exits */
 	
+	/* Parameter strings */
 	public static final String
-		EMPTY = "",
-		INFO = "info",
+		EMPTY = "", /* For messages with no (real) parameters */
+		INFO = "info", /* OK param for sending multicast data and followers list */
 		USERS = "users",
 		FOLLOWERS = "followers",
 		FOLLOWING = "following",
 		FEED = "feed",
 		BTC = "btc",
-		NOTIFY = "notify",
-		CMD = "cmd";
+		NOTIFY = "notify";
 	
 	public static final List<String> COMMANDS = Common.toList(
-		OK, ERR, FWLIST, MCAST, REG, LOGIN, LOGOUT, LIST, FOLLOW, UNFOLLOW, BLOG, POST, SHOW,
+		OK, ERR, REG, LOGIN, LOGOUT, LIST, FOLLOW, UNFOLLOW, BLOG, POST, SHOW,
 		DELETE, REWIN, RATE, COMMENT, WALLET, HELP, QUIT, EXIT
 	);
 	
@@ -75,18 +86,9 @@ public final class Message {
 	
 	public static final Map<String, List<String>> CODES = Common.newHashMapFromLists(
 		COMMANDS,
-		/*
-		 * EMPTY -> messaggio (di conferma)
-		 * INFO -> messaggio, ip, port(, udp?), <utente : tags>
-		 * LIST -> messaggio, <listItem> (<utente # tags> per utenti, <id : author : title> per post)
-		 * POST -> messaggio, title, content, likes, dislikes, <comment>
-		 * WALLET -> messaggio, valore, <transazione>
-		 */
 		Arrays.asList(
 			Arrays.asList(EMPTY, INFO, LIST, POST, WALLET, QUIT, EXIT),
 			emptyList,
-			emptyList,			
-			emptyList,			
 			emptyList,			
 			emptyList,			
 			emptyList,			
@@ -100,8 +102,8 @@ public final class Message {
 			emptyList,			
 			emptyList,			
 			emptyList,			
-			Arrays.asList(EMPTY, BTC),
-			Arrays.asList(EMPTY, CMD),
+			Arrays.asList(EMPTY, BTC, NOTIFY),
+			emptyList,
 			emptyList,			
 			emptyList		
 		)
@@ -112,14 +114,14 @@ public final class Message {
 	private final String idStr, paramStr;
 	@NotNull
 	private final List<String> arguments;
-	private int length;
+	private int length; /* Total length of the message */
 	
 	/**
 	 * Converts a couple (id, param) representing id and param of a Message object into its corresponding
-	 * byte couple as byte array.
+	 * integer couple as integer array.
 	 * @param id Message identifier.
 	 * @param param Message param.
-	 * @return A byte array containing encoding of (id, param).
+	 * @return An integer array containing encoding of (id, param).
 	 * @throws MessageException If id corresponds to an invalid command or param corresponds to an invalid param.
 	 * @throws IllegalArgumentException If id == null.
 	 */
@@ -136,13 +138,14 @@ public final class Message {
 		return result;
 	}
 	
+	/** See {@link #getCode(String, String)} */
 	@NotNull
 	public static final int[] getCode(String id) throws MessageException { return getCode(id, null); }
 	
 	/**
 	 * Decodes (idCode, paramCode) into a couple (id, param) representing id and param of the current message.
-	 * @param idCode Byte representing id.
-	 * @param paramCode Byte representing param (-1 if there are no params).
+	 * @param idCode Int representing id.
+	 * @param paramCode Int representing param (-1 if there are no params).
 	 * @return A String array of length 2 containing the decoded strings.
 	 * @throws MessageException For unrecognized id or param.
 	 */
@@ -163,18 +166,12 @@ public final class Message {
 		param = new String( l.get(paramCode) );
 		return new String[] {id, param};
 	}
-
-	/*
-	 * EMPTY -> messaggio (di conferma)
-	 * INFO -> messaggio, ip, port(, udp?), <utente : tags>
-	 * LIST -> messaggio, <listItem> (<utente : tags> per utenti, <id : author : title> per post)
-	 * POST -> messaggio, title, content, likes, dislikes, <comment>
-	 * WALLET -> messaggio, valore, <transazione>
-	 */
+	
 	/**
-	 * Creates a new OK message with a confirmation text message for the receiver.
-	 * @param message Text message for the receiver.
-	 * @return A new OK Message object.
+	 * Creates a new OK message with a formatted confirmation text message for the receiver.
+	 * @param format Format string.
+	 * @param objs Objects to format.
+	 * @return A new (OK, EMPTY) Message object.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
 	public static Message newOK(String format, Object...objs) {
@@ -183,9 +180,10 @@ public final class Message {
 	}
 	
 	/**
-	 * 
-	 * @param message Text message for the receiver.
-	 * @return
+	 * Creates a new ERR message with a formatted confirmation text message for the receiver.
+	 * @param format Format string.
+	 * @param objs Objects to format.
+	 * @return A new (ERR, EMPTY) Message object.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
 	public static Message newError(String format, Object...objs) {
@@ -194,66 +192,64 @@ public final class Message {
 	}
 
 	/**
-	 * Creates a new info message (multicast data + followers list) for the receiver.
-	 * @param message Text message for the receiver.
+	 * Creates a new info message (multicast data + followers list) with a formatted text message for the receiver.
 	 * @param ip Multicast group IP address.
 	 * @param port Multicast group port.
 	 * @param users Followers.
-	 * @return A new INFO Message object.
+	 * @param fmt Format string.
+	 * @param objs Objects to format.
+	 * @return A new (OK, INFO) Message object.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newInfo(String ip, int port, int mcastMsgLen, List<String> users, String fmt, Object...objects) {
-		String message = String.format(fmt, objects);
+	public static Message newInfo(String ip, int port, int mcastMsgLen, List<String> users, String fmt, Object...objs) {
+		String message = String.format(fmt, objs);
 		List<String> args = Common.toList(users, message, ip, Integer.toString(port), Integer.toString(mcastMsgLen));
 		try { return new Message(OK, INFO, args); } catch (MessageException mex) { return null; }
 	}
 	
 	/**
-	 * Creates a new list message (username+tags for "list following" and "list users", 
+	 * Creates a new list message (username + tags for "list following" and "list users", 
 	 * id+author+title for "show feed" and "blog").
-	 * @param message Text message for the receiver.
 	 * @param items User info / Post info strings.
-	 * @return A new LIST Message object.
+	 * @param fmt Format string.
+	 * @param objs Objects to format.
+	 * @return A new (OK, LIST) Message object.
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newList(List<String> items, String fmt, Object...objects) {
-		String message = String.format(fmt, objects);
+	public static Message newList(List<String> items, String fmt, Object...objs) {
+		String message = String.format(fmt, objs);
 		List<String> args = Common.toList(items, message);
 		try { return new Message(OK, LIST, args); } catch (MessageException mex) { return null; }
 	}
 	
 	/**
-	 * 
-	 * @param message Text message for the receiver.
-	 * @param title
-	 * @param content
-	 * @param likes
-	 * @param dislikes
-	 * @param comments
-	 * @return
+	 * Creates a new post message (title, content, votes, comments, initial text message).
+	 * @param title Title.
+	 * @param content Content.
+	 * @param likes Positive rates.
+	 * @param dislikes Negative rates.
+	 * @param comments Comments.
+	 * @param fmt Format string.
+	 * @param objects Objects to format.
+	 * @return A new (OK, POST) Message object.
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newPost(String title, String content, long likes, long dislikes,
+	public static Message newPost(String title, String content, String likes, String dislikes,
 		List<String> comments, String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
-		List<String> args = Common.toList(comments, message, title, content, Long.toString(likes), Long.toString(dislikes));
+		List<String> args = Common.toList(comments, message, title, content, likes, dislikes);
 		try { return new Message(OK, POST, args); } catch (MessageException mex) { return null; }
 	}
-	
-	public static Message newPost(List<String> postData, String fmt, Object...objects) {
-		String message = String.format(fmt, objects);
-		List<String> args = Common.toList(postData, message);
-		try { return new Message(OK, POST, args); } catch (MessageException mex) { return null; }
-	}
-	
+		
 	/**
-	 * 
-	 * @param message Text message for the receiver.
-	 * @param value
-	 * @param transactions
-	 * @return
+	 * Creates a new wallet message.
+	 * @param value Wincoin wallet value.
+	 * @param transactions List of transactions as formatted in {@link winsome.server.data.Wallet#history()}.
+	 * @param fmt Format string.
+	 * @param objects Objects to format.
+	 * @return A new (OK, WALLET) Message object.
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
@@ -264,12 +260,13 @@ public final class Message {
 	}
 	
 	/**
-	 * 
-	 * @param message Text message for the receiver.
-	 * @param btcValue
-	 * @param value
-	 * @param transactions
-	 * @return
+	 * Creates a new wallet message with the value of the wincoin -> bitcoin conversion as first argument.
+	 * @param btcValue Bitcoin value.
+	 * @param value Wincoin value.
+	 * @param transactions List of transactions as formatted in {@link winsome.server.data.Wallet#history()}.
+	 * @param fmt Format string.
+	 * @param objects Objects to format.
+	 * @return A new (OK, WALLET) Message object.
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
@@ -280,26 +277,31 @@ public final class Message {
 		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
 	}
 	
+	/**
+	 * Create a new (response) message for confirming client exit after a {@link #EXIT} or {@link QUIT} request.
+	 * @param fmt Format string.
+	 * @param objects Objects to format.
+	 * @return A new (OK, QUIT) Message object.
+	 */
 	public static Message newQuit(String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
 		List<String> args = Common.toList(message);
 		try { return new Message(OK, QUIT, args); } catch (MessageException mex) { return null; }		
 	}
 	
+	/**
+	 * Converts a {@link Command} to a Message object.
+	 * @param cmd Input command.
+	 * @return A Message Object corresponding to the given command. 
+	 * @throws MessageException If thrown by Message constructor.
+	 */
 	@NotNull
 	public static Message newMessageFromCmd(Command cmd) throws MessageException {
 		Common.notNull(cmd);
 		List<String> args = Common.toList(cmd.getArgs());
 		return new Message(cmd.getId(), cmd.getParam(), args);
 	}
-
-	/**
-	 * 
-	 * @param id
-	 * @param param
-	 * @param arguments
-	 * @throws MessageException
-	 */
+	
 	public Message(String id, String param, List<String> arguments) throws MessageException {
 		Common.notNull(id);
 		if (param == null) param = Message.EMPTY;
@@ -315,13 +317,6 @@ public final class Message {
 		this.length = 3 * Integer.BYTES + Integer.BYTES * this.argN + argsLen;
 	}
 	
-	/**
-	 * 
-	 * @param idCode
-	 * @param paramCode
-	 * @param arguments
-	 * @throws MessageException
-	 */
 	public Message(int idCode, int paramCode, List<String> arguments) throws MessageException {
 		Common.notNull(arguments);
 		
@@ -337,7 +332,17 @@ public final class Message {
 		for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
 		this.length = 3 * Integer.BYTES + Integer.BYTES * this.argN + argsLen;
 	}
-
+	
+	/**
+	 * Encodes a Message into a byte array to send to a stream/channel.
+	 * Encoded format is a byte concatenation of:
+	 *  1) 4 bytes for message length;
+	 *  2) 4 bytes for message id;
+	 *  3) 4 bytes for message param;
+	 *  4) 4 bytes for the other number of arguments;
+	 *  5) for each argument: 4 bytes for the length of byte encoding of the string followed by that byte encoding.
+	 * @return A byte array containing the encoded message.
+	 */
 	public final byte[] encode() {
 		byte[] result = new byte[this.length + Integer.BYTES];
 		int index = 0;
@@ -349,28 +354,14 @@ public final class Message {
 		return result;
 	}
 	
-	/**
-	 * 
-	 * @return
-	 */
 	@NotNull
 	public final String getIdStr() { return this.idStr; }
 	
-	/**
-	 * 
-	 * @return
-	 * @throws MessageException
-	 */
 	@NotNull
 	public final String getParamStr() { return this.paramStr; }
 	
-	/**
-	 * 
-	 * @return
-	 * @throws MessageException
-	 */
 	@NotNull
-	public final String[] getIdParam() throws MessageException {
+	public final String[] getIdParam() {
 		return new String[] {idStr, paramStr};
 	}
 	
@@ -381,23 +372,23 @@ public final class Message {
 	public final int getLength() { return length; }
 	
 	/**
-	 * 
-	 * @param chan
-	 * @param buf
-	 * @throws IOException
+	 * Sends a message to a channel using a MessageBuffer as support.
+	 * @param chan Output channel.
+	 * @param buf Support buffer.
+	 * @throws IOException On I/O errors.
 	 */
 	public final boolean sendToChannel(WritableByteChannel chan, MessageBuffer buf) throws IOException {
 		Common.notNull(chan, buf);
 		buf.clear();
 		byte[] data = this.encode();
 		try { buf.readAllFromArray(data, chan); return true; }
-		catch (SocketException | ConnResetException ex) { return false; }
+		catch (SocketException ex) { return false; }
 	}
 	
 	/**
-	 * 
-	 * @param out
-	 * @throws IOException
+	 * Sends a message to a stream.
+	 * @param out Output stream.
+	 * @throws IOException On I/O errors.
 	 */
 	public final boolean sendToStream(OutputStream out) throws IOException {
 		Common.notNull(out);		
@@ -413,7 +404,8 @@ public final class Message {
 	 * reading has not correctly completed (e.g. EOS closed by other peer).
 	 * @throws IOException Thrown by {@link MessageBuffer#writeAllToArray(int, ReadableByteChannel)}
 	 * @throws MessageException Thrown by {@link #getIdParam(byte, byte)} (invalid id/param) or by
-	 * Message constructor.
+	 *  Message constructor.
+	 * @throws NullPointerException If chan == null or buf == null.
 	 */
 	@NotNull
 	public static final Message recvFromChannel(ReadableByteChannel chan, MessageBuffer buf)
@@ -422,10 +414,11 @@ public final class Message {
 		String cArg;
 		buf.clear();
 		byte[] readArr = buf.writeAllToArray(Integer.BYTES, chan);
-		if (!(readArr != null && readArr.length == Integer.BYTES)) throw new ConnResetException(); /* EOS reached etc. */
+		Common.allAndConnReset(readArr != null, readArr.length == Integer.BYTES); /* EOS reached etc. */
 		int length = Common.intFromByteArray(readArr);
 		readArr = buf.writeAllToArray(length, chan);
-		if (!(readArr != null && readArr.length == length)) throw new ConnResetException(); /* EOS reached etc. */
+		Common.allAndConnReset(readArr != null, readArr.length == length); /* EOS reached etc. */
+		
 		int idCode = Common.intFromByteArray(readArr), paramCode = Common.intFromByteArray(readArr, Integer.BYTES);
 		String[] strCodes = Message.getIdParam(idCode, paramCode);
 		int argN = Common.intFromByteArray(readArr, Integer.BYTES * 2);
@@ -442,11 +435,12 @@ public final class Message {
 	}
 	
 	/**
-	 * 
-	 * @param in
-	 * @return
-	 * @throws IOException
-	 * @throws MessageException
+	 * Receives a Message object from a stream.
+	 * @param in Input stream.
+	 * @return A Message object as decoded by the received data.
+	 * @throws IOException On I/O errors.
+	 * @throws MessageException If the built message is not correct.
+	 * @throws NullPointerException If in == null.
 	 */
 	@NotNull
 	public static final Message recvFromStream(InputStream in) throws IOException, MessageException {

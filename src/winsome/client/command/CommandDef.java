@@ -1,79 +1,115 @@
 package winsome.client.command;
 
 import java.util.*;
-import java.util.regex.*;
+import java.util.function.*;
 
-import winsome.util.Common;
+import winsome.annotations.NotNull;
+import winsome.util.*;
 
+/**
+ * This class provides a parser definition for a single command (i.e. a single starting id) with all
+ *  possible parameters.
+ * @author Salvatore Correnti
+ * @see Command
+ * @see CommandArgs
+ * @see CommandParser
+ */
 public final class CommandDef {
 	
-	private static final String[] SYNTAX_ERROR = {"Syntax error for ", ": '", "'"};
+	private static final String SYNTAX_ERROR = "Syntax error for %s: '%s'";
 	
-	public static final String ID_PARAM_REGEX = "[a-z]+";
-	public static final String SPACE = "[\s\t\f\r\n]";
-	public static final String SPACE_PLUS = SPACE + "+";
-	public static final String SPACE_STAR = SPACE + "*";
+	/** Standard matcher for id and params */
+	@NotNull
+	public static final ToIntFunction<String>
+		IdParamRegex = Common.regexMatcher("[a-z]+");
+		
 	
 	private final String id;
-	private final HashMap<String, CommandArgs> args; /* param -> regex (eventualmente param = "") */
+	private final Map<String, CommandArgs> args; /* param -> regex */
 	
-	public CommandDef(String id, HashMap<String, CommandArgs> args) {
+	public CommandDef(String id, Map<String, CommandArgs> args) {
 		Common.notNull(id, args);
-		if (!Pattern.matches(ID_PARAM_REGEX, id))
-			throw new IllegalArgumentException(SYNTAX_ERROR[0] + "id" + SYNTAX_ERROR[1] + id + SYNTAX_ERROR[2]);
+		if ( !matchesIdParam(id) ) throw new IllegalArgumentException( Common.excStr(SYNTAX_ERROR, "id", id) );
 		for (String key : args.keySet()) {
-			if ((key != null) && !Pattern.matches(ID_PARAM_REGEX, key))
-				throw new IllegalArgumentException(SYNTAX_ERROR[0] + "parameter " + SYNTAX_ERROR[1] + key + SYNTAX_ERROR[2]);
+			if (key == null) throw new NullPointerException("Null exception!");
+			if (!matchesIdParam(key))
+				throw new IllegalArgumentException( Common.excStr(SYNTAX_ERROR, "parameter", key) );
 		}
 		this.id = id;
 		this.args = args;
 	}
 	
+	/**
+	 * Matches a line made up only by whitespace or that starts with a comment sign '#'.
+	 * @param cmdline Input line.
+	 * @return true if line is as described above, false otherwise.
+	 */
 	public static final boolean matchWSpaceComment(String cmdline) {
 		String cmdstrip = Common.strip(cmdline);
 		if (cmdstrip.length() == 0 || cmdstrip.startsWith("#")) return true;
 		else return false;
 	}
 	
-	public static final String matchId(String cmdline) {
-		String cmdstrip = Common.strip(cmdline);
-		Matcher m = Pattern.compile(ID_PARAM_REGEX).matcher(cmdstrip);
-		return (m.find() ? cmdstrip.substring(0, m.end()) : null);
+	/**
+	 * Attempts to match an id definition at the beginning of a command line to speed up
+	 *  command definition search (see {@link CommandParser#nextCmd()}).
+	 * @param cmdline Command line.
+	 * @return The string matched at the beginning of the line as a command definition id
+	 *  candidate on success, an empty string ({@link Command#EMPTY}) on error.
+	 */
+	@NotNull
+	public static final String matchIdPar(String cmdline) {
+		Common.notNull(cmdline);
+		cmdline = Common.strip(cmdline);
+		int result = IdParamRegex.applyAsInt(cmdline);
+		if (result < 0) return Command.EMPTY;
+		else if (result == cmdline.length()) return cmdline;
+		else {
+			char ch = cmdline.charAt(result);
+			if (Character.isWhitespace(ch)) return cmdline.substring(0, result);
+			else return Command.EMPTY;
+		}
 	}
 	
+	public static final boolean matchesIdParam(String cmdline) { return matchIdPar(cmdline).equals(cmdline); }
+	
+	/**
+	 * Attempts to match an entire line with this Command definition and if yes, returns a Command object
+	 *  as result of the matching.
+	 * @param cmdline Input line.
+	 * @return A Command object as result of the matching on success, {@link Command#NULL} on failure.
+	 */
+	@NotNull
 	public final Command matchDef(String cmdline) {
-		Command result = null;
-		String regex = null;
-		String start = null;
-		String param = null;
-		String args = null;
-		String cmdstrip = Common.strip(cmdline);
-		for (String key : this.args.keySet()) {
-			CommandArgs c = this.args.get(key);
-			String val = (c != null ? c.getRegex() : null);
-			
-			start = (key != null ? new String(this.id + SPACE_PLUS + key) : new String(this.id));
-			regex = ( val != null ? new String(start + SPACE_PLUS + val + SPACE_STAR) : new String(start + SPACE_STAR) );
-			
-			if (Pattern.matches(regex, cmdstrip)) {
-				Matcher m = Pattern.compile(start).matcher(cmdstrip);
-				m.find();
-				args = Common.strip( cmdstrip.substring(m.end()) );
-				param = (key != null ? new String(key) : null);
-				if (args.length() > 0) result = new Command(new String(id), param, c.extractArgs(args));
-				else result = new Command(new String(id), param, new ArrayList<>());
-				break;
+		String cmdcopy = Common.stripLeading(cmdline);
+		int n = Common.regexMatcher(id).applyAsInt(cmdcopy);
+		if (n == id.length()) cmdcopy = Common.stripLeading(cmdcopy.substring(n));
+		else return Command.NULL;
+		for (String key : args.keySet()) {
+			CommandArgs cargs = args.get(key);
+			String str = cmdcopy, param = Command.EMPTY;
+			if (!key.equals(Command.EMPTY)) {
+				n = Common.regexMatcher(key).applyAsInt(str);
+				if (n == key.length()) {
+					str = Common.stripLeading(str.substring(n));
+					param = new String(key);
+				} else continue;
 			}
+			List<String> args;
+			try { args = cargs.extractArgs(str); }
+			catch (Exception ex) { continue; }
+			
+			return new Command(new String(id), param, args);
 		}
-		return result;
+		return Command.NULL;
 	}
-
+	
 	public String getId() { return this.id; }
 	
-	public HashMap<String, CommandArgs> getArgs() { return this.args; }
+	public Map<String, CommandArgs> getArgs() { return this.args; }
 	
 	public int hashCode() { return Objects.hash(id); }
-
+	
 	public boolean equals(Object obj) {
 		if (this == obj) return true;
 		if (obj == null) return false;
