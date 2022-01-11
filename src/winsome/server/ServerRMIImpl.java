@@ -57,7 +57,7 @@ final class ServerRMIImpl extends UnicastRemoteObject implements ServerRMI {
 	 */
 	public boolean followersRegister(String username, ClientRMI client) throws RemoteException {
 		Common.notNull(username, client);
-		synchronized (this.clients) { return (this.clients.putIfAbsent(username, client) == null); }
+		return (this.clients.putIfAbsent(username, client) == null);
 	}
 	
 	/**
@@ -67,24 +67,20 @@ final class ServerRMIImpl extends UnicastRemoteObject implements ServerRMI {
 	 */
 	public boolean followersUnregister(String username) throws RemoteException {
 		Common.notNull(username);
-		synchronized (this.clients) { return (this.clients.remove(username) != null); }
+		return (this.clients.remove(username) != null);
 	}
 		
 	boolean addFollower(String follower, String followed, List<String> tags) throws RemoteException { //Tag di chi segue!
 		Common.notNull(follower, followed, tags);
 		ClientRMI client;
-		synchronized (this.clients) {
-			client = this.clients.get(followed);
-			return (client != null ? client.addFollower(follower, tags) : true);
-		}
+		client = this.clients.get(followed);
+		return (client != null ? client.addFollower(follower, tags) : true);
 	}
 	
 	boolean removeFollower(String follower, String followed) throws RemoteException {
 		Common.notNull(follower, followed);
 		ClientRMI client;
-		synchronized (this.clients) {
-			client = this.clients.get(followed);
-			return (client != null ? client.removeFollower(follower) : true);
-		}
+		client = this.clients.get(followed);
+		return (client != null ? client.removeFollower(follower) : true);
 	}
 }

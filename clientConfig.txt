@@ -1,19 +1,10 @@
 # File di configurazione del client
 # Indirizzo del server
 SERVER		=	127.0.0.1
-# 192.168.1.120
+#192.168.1.120
 
 # Porta TCP del server
 TCPPORT		=	6666
-
-# Porta UDP del server
-UDPPORT		=	33333
-
-# Indirizzo di multicast
-MULTICAST	=	239.255.32.32
-
-# Porta di multicast
-MCASTPORT	=	44444
 
 # Host su cui si trova il registry
 REGHOST		=	localhost

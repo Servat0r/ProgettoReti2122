@@ -47,7 +47,8 @@ final class WinsomeClientHelp {
 		CommandParser.QUIT,
 		CommandParser.EXIT,
 		CommandParser.WHOAMI,
-		CommandParser.CLEAR
+		CommandParser.CLEAR,
+		CommandParser.WAIT
 	);
 	
 	private static final Map<String, String> quitMap = newMap(list(""), list("Closes this program if user is logged out"));
@@ -109,7 +110,7 @@ final class WinsomeClientHelp {
 			newMap(
 				list(Command.EMPTY),
 				list("Shows all posts in the blog of the current user, i.e. each one created or rewinned by the current\n"
-					+ "user. The list is of the form e.g.:\nId | Author | Title\n---?-?--------?-?-------\n1  | user1  |"
+					+ "user. The list is of the form e.g.:\nId | Author | Title\n--------------------\n1  | user1  |"
 					+ " title1\n2  | user2  | title2\nfor a user named 'user1' who has created post with (id = 1) and that"
 					+ " has rewon a post created by 'user2' with (id = 2).")
 			),
@@ -182,6 +183,10 @@ final class WinsomeClientHelp {
 				list(Command.EMPTY),
 				list("Attempts to clear console screen. Particularly, attempts to execute the command 'clear' as a subprocess,\n"
 					+ "on failure tries to execute 'cls', and on failure also on this it terminates without doing anything more.")
+			),
+			newMap(
+				list("<secs>"),
+				list("Waits for <secs> seconds, unless interrupted by another thread.")
 			)
 		)
 	);

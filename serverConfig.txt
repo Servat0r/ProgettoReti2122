@@ -5,7 +5,7 @@
 # Porta TCP del server
 TCPPORT		=	6666
 
-# Porta UDP del server
+# Porta locale al server del multicast socket
 UDPPORT		=	33333
 
 # Indirizzo di multicast
@@ -25,14 +25,17 @@ TCPTIMEOUT	=	100000
 # File json del server
 SERVERJSON	=	server.json
 
-# File json del server
+# File json degli utenti
 USERJSON	=	users.json
 
-# File json del server
+# File json dei post
 POSTJSON	=	posts.json
 
+# File json dei wallet
+WALLETJSON	=	wallets.json
+
 # Periodo di calcolo ricompense
-RWPERIOD	=	30.0
+RWPERIOD	=	30
 
 # TimeUnit per il periodo di calcolo ricompense
 RWPERIODUNIT	=	SECONDS

@@ -40,7 +40,8 @@ public final class CommandParser implements AutoCloseable, Iterable<CommandDef> 
 		QUIT = "quit",
 		EXIT = "exit",
 		WHOAMI = "whoami",
-		CLEAR = "clear";
+		CLEAR = "clear",
+		WAIT = "wait";
 	
 	/* Param strings */
 	public static final String
@@ -179,7 +180,8 @@ public final class CommandParser implements AutoCloseable, Iterable<CommandDef> 
 			new CommandDef(QUIT, idOnlyMap),
 			new CommandDef(EXIT, idOnlyMap),
 			new CommandDef(WHOAMI, idOnlyMap),
-			new CommandDef(CLEAR, idOnlyMap)
+			new CommandDef(CLEAR, idOnlyMap),
+			new CommandDef(WAIT, numMap)
 		);
 	}
 	

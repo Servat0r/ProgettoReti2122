@@ -35,7 +35,7 @@ public final class WinsomeServerMain {
 			else ex.printStackTrace();
 			exitCode = 1;
 		} finally {
-			try { t.join(); }
+			try { t.join(); server.logger().log("Joined");}
 			catch (Exception ex) {
 				if (server != null) server.logger().logStackTrace(ex);
 				else ex.printStackTrace();

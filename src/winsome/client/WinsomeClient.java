@@ -275,6 +275,13 @@ public final class WinsomeClient implements AutoCloseable {
 				result = (code == 0);
 			}
 			
+			else if ( id.equals(CommandParser.WAIT) ) {
+				long millis = ConfigUtils.newLong.apply(args.get(0));
+				Debug.println(millis);
+				result = Common.sleep(millis * 1000);
+				out.println("End");
+			}
+			
 			else if ( id.equals(Message.LOGOUT) ) {
 				if (!this.isUserSet()) return this.printError(NONE_LOGGED);
 				else {
@@ -559,7 +566,6 @@ public final class WinsomeClient implements AutoCloseable {
 				return this.printOK(confirm);
 				
 			} else if (id.equals(Message.ERR)) {
-				Debug.println(msg.getArguments());
 				return this.printError(confirm);
 			
 			} else return this.printError(ILL_RESPONSE);
@@ -606,7 +612,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
 				String confirm = l.remove(0);
 				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
+					if (!param.equals(Message.USLIST)) return this.printError(ILL_RESPONSE);
 					ConcurrentMap<String, List<String>> map;
 					if (!l.isEmpty()) {
 						map = Serialization.deserializeMap(l);
@@ -640,7 +646,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
 				String confirm = l.remove(0);
 				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
+					if (!param.equals(Message.USLIST)) return this.printError(ILL_RESPONSE);
 					ConcurrentMap<String, List<String>> map;
 					if (l.size() > 0) {
 						map = Serialization.deserializeMap(l);
@@ -668,18 +674,16 @@ public final class WinsomeClient implements AutoCloseable {
 	public boolean viewBlog() throws IOException { 
 		try {
 			Message msg = new Message(Message.BLOG, Message.EMPTY, null);
-			if (!msg.sendToStream(tcpOut)) { Debug.println(); return this.printError(CLOSED); }
+			if (!msg.sendToStream(tcpOut)) { return this.printError(CLOSED); }
 			else {
-				Debug.println();
 				msg = Message.recvFromStream(tcpIn);
 				List<String> l = msg.getArguments();
 				if (l.size() % 3 != 1) return this.printError(ILL_RESPONSE);
-				Debug.println();
 				String confirm = l.remove(0);
 				String[] strCodes = msg.getIdParam();
 				String id = strCodes[0], param = strCodes[1];
 				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
+					if (!param.equals(Message.PSLIST)) return this.printError(ILL_RESPONSE);
 					List<List<String>> posts;
 					if (l.size() > 0) {
 						posts = Serialization.deserializePostList(l, 3);
@@ -711,7 +715,7 @@ public final class WinsomeClient implements AutoCloseable {
 				if (l.size() % 3 != 1) return this.printError(ILL_RESPONSE);
 				String confirm = l.remove(0);
 				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.LIST)) return this.printError(ILL_RESPONSE);
+					if (!param.equals(Message.PSLIST)) return this.printError(ILL_RESPONSE);
 					List<List<String>> posts = Serialization.deserializePostList(l, 3);
 					if (posts == null) return this.printError("When getting post list");
 					String output = this.formatPostList(posts);

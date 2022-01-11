@@ -242,7 +242,6 @@ public final class WinsomeServer implements AutoCloseable {
 		for (User u : this.users.getAll()) { u.deserialize(this.users, this.posts, this.wallets); }
 		PrintStream logStream = (logName != EMPTY ? new PrintStream(logName) : System.out);
 		this.logger = new Logger(LOGSTR, ERRLOGSTR, logStream);
-		logger.log(Common.jsonString(iterationMap));
 		this.tcpSockAddr = new InetSocketAddress(InetAddress.getByName(serverHost), tcpPort);
 		this.loggedMap = new ConcurrentHashMap<>();
 		this.unlogged = new HashSet<>();
@@ -367,7 +366,7 @@ public final class WinsomeServer implements AutoCloseable {
 			WinsomeServer server = null;
 			if (serverReader != null) {
 				try { server = Serialization.GSON.fromJson(serverReader, WinsomeServer.TYPE); }
-				catch (JsonIOException | JsonSyntaxException ex) { Debug.println(ex); server = null; }
+				catch (JsonIOException | JsonSyntaxException ex) { ex.printStackTrace(); server = null; }
 				finally { serverReader.close(); }
 			}
 			if (server != null) {
@@ -416,7 +415,7 @@ public final class WinsomeServer implements AutoCloseable {
 		while (state == State.ACTIVE) {
 			
 			try { selected = selector.select(); }
-			catch (ClosedSelectorException cse) { break; }
+			catch (ClosedSelectorException cse) { logger.log("Selector closed [0]"); break; }
 			finally {
 				illegalState = this.getIllegalState();
 				if ( !illegalState.equals(ILLSTATE_OK) ) {
@@ -544,8 +543,8 @@ public final class WinsomeServer implements AutoCloseable {
 	@NotNull
 	Pair<Boolean, String> register(String username, String password, List<String> tags) {
 		User user = User.newUser(username, password, users, posts, wallets, tags);
-		if (user == null) return new Pair<>(false, "Registrazione fallita: utente " + username + " già presente!");
-		if (!users.putIfAbsent(user)) return new Pair<>(false, "Registrazione fallita: errore interno al server");
+		if (user == null) return new Pair<>(false, String.format(ServerUtils.REG_EXISTING, username));
+		if (!users.putIfAbsent(user)) return new Pair<>(false, ServerUtils.INTERROR);
 		NavigableSet<String> set; 
 		for (String t : tags) {
 			String tag = new String(t);
@@ -554,7 +553,7 @@ public final class WinsomeServer implements AutoCloseable {
 			set.add(new String(username));
 		}
 		logger.log("Registrato nuovo utente: '%s' con tags: '%s'", username, tags.toString());
-		return new Pair<>(true, "Registrazione avvenuta con successo!");
+		return new Pair<>(true, String.format(ServerUtils.REG_OK, username));
 	}
 	
 	/**
@@ -626,7 +625,7 @@ public final class WinsomeServer implements AutoCloseable {
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
 		List<String> following = Serialization.serializeMap(user.getFollowing());
-		return Message.newList(following, ServerUtils.OK);
+		return Message.newUserList(following, ServerUtils.OK);
 	}
 	
 	/**
@@ -650,7 +649,7 @@ public final class WinsomeServer implements AutoCloseable {
 		NavigableSet<User> users = this.users.get(set);
 		for (User u : users) map.put(u.key(), u.tags());
 		result = Serialization.serializeMap(map);
-		return Message.newList(result, ServerUtils.OK);
+		return Message.newUserList(result, ServerUtils.OK);
 	}
 	
 	/**
@@ -722,7 +721,7 @@ public final class WinsomeServer implements AutoCloseable {
 		SocketChannel client = (SocketChannel)skey.channel();
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
-		else return Message.newList(user.getBlog(), ServerUtils.OK);
+		else return Message.newPostList(user.getBlog(), ServerUtils.OK);
 	}
 	
 	/**
@@ -762,7 +761,7 @@ public final class WinsomeServer implements AutoCloseable {
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
 		List<String> feed = user.getFeed();
-		return Message.newList(feed, Message.OK);
+		return Message.newPostList(feed, Message.OK);
 	}
 	
 	/**
@@ -1010,44 +1009,35 @@ public final class WinsomeServer implements AutoCloseable {
 		Gson gson = Serialization.GSON;
 		logger.log("Serializing on (%s, %s, %s, %s)", userJson, postJson, walletJson, serverJson);
 		
-		try ( FileOutputStream w = new FileOutputStream(walletJson); ){
-			String jsond = gson.toJson(wallets);
-			w.write(jsond.getBytes());
-		} catch (IOException exc) { logger.logStackTrace(exc); }
-		
-		try ( FileOutputStream p = new FileOutputStream(postJson); ){
-			String jsond = gson.toJson(posts);
-			p.write(jsond.getBytes());
-		} catch (IOException exc) { logger.logStackTrace(exc); }
-		
-		try ( FileOutputStream u = new FileOutputStream(userJson); ){
-			String jsond = gson.toJson(users);
-			u.write(jsond.getBytes());
-		} catch (IOException exc) { logger.logStackTrace(exc); }
-		
-		try ( FileOutputStream s = new FileOutputStream(serverJson); ){
-			String jsond = gson.toJson(this, WinsomeServer.class);
-			s.write(jsond.getBytes());
-		} catch (IOException exc) { Debug.debugExc(exc); exc.printStackTrace(); }
-/*		try (JsonWriter walletsWriter = Serialization.fileWriter(walletJson)){
-			String jsond = gson.toJson(wallets);
-			Debug.println(jsond);
-			//gson.toJson(wallets, Wallet.TYPE, walletsWriter);
-		} catch (IOException ioe) { ioe.printStackTrace(err); throw new IllegalStateException(); }
+		try (JsonWriter walletsWriter = Serialization.fileWriter(walletJson)){
+			gson.toJson(wallets, ServerUtils.WALLETSTYPE, walletsWriter);
+		} catch (IOException ioe) {
+			logger.logStackTrace(ioe);
+			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", walletJson));
+		}
 		
 		try (JsonWriter postsWriter = Serialization.fileWriter(postJson)){
-			gson.toJson(posts, WinsomeServer.POSTSTYPE, postsWriter);
-		} catch (IOException ioe) { ioe.printStackTrace(err); throw new IllegalStateException(); }
+			gson.toJson(posts, ServerUtils.POSTSTYPE, postsWriter);
+		} catch (IOException ioe) {
+			logger.logStackTrace(ioe);
+			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", postJson));
+		}
 		
 		try (JsonWriter usersWriter = Serialization.fileWriter(userJson)){
-			gson.toJson(users, WinsomeServer.USERSTYPE, usersWriter);
-		} catch (IOException ioe) { ioe.printStackTrace(err); throw new IllegalStateException(); }
+			gson.toJson(users, ServerUtils.USERSTYPE, usersWriter);
+		} catch (IOException ioe) {
+			logger.logStackTrace(ioe);
+			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", userJson));
+		}
 		
 		try (JsonWriter serverWriter = Serialization.fileWriter(serverJson)){
 			gson.toJson(this, WinsomeServer.TYPE, serverWriter);
-		} catch (IOException ioe) { ioe.printStackTrace(err); throw new IllegalStateException(); }
-*/	}
-	
+		} catch (IOException ioe) {
+			logger.logStackTrace(ioe);
+			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", serverJson));
+		}
+	}
+		
 	public synchronized void close() throws Exception {
 		if (state == State.ACTIVE || state == State.CLOSING) {
 			this.state = State.CLOSED;

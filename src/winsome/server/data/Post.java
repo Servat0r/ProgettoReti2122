@@ -42,13 +42,14 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	private transient ReentrantReadWriteLock voteLock;
 	
 	/* This field should be accessed in read/write mode */
-	private final Map<String, SortedSet<Comment>> comments;
+	private final Map<String, NavigableSet<Comment>> comments;
 	private transient ReentrantReadWriteLock commentLock;
 	
 	@NotNull
 	private NavigableSet<String> rewinners;
 	
 	@NotNull
+	//private NavigableSet<Action> actions;
 	private double iteration;
 	
 	/** Sets the id generator to the given one (has effect only once e.g. after deserialization of the server) */
@@ -83,6 +84,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		this.commentLock = new ReentrantReadWriteLock();
 		this.rewinners = new TreeSet<>();
 		this.iteration = 1.0;
+		//this.actions = new TreeSet<>();
 	}
 	
 	/* No sync need */
@@ -104,7 +106,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	 * @return A list of string as specified above.
 	 */
 	@NotNull
-	private List<String> formatComments(Map.Entry<String, SortedSet<Comment>> entry){
+	private List<String> formatComments(Map.Entry<String, NavigableSet<Comment>> entry){
 		List<String> result = new ArrayList<>();
 		Iterator<Comment> iter = entry.getValue().iterator();
 		String authStr = String.format("  %s: ", entry.getKey());
@@ -145,7 +147,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		Common.notNull(author, content);
 		Common.allAndArgs(author.length() > 0, content.length() > 0);
 		if (author.equals(this.author)) throw new DataException(DataException.SAME_AUTHOR);
-		SortedSet<Comment> set;
+		NavigableSet<Comment> set;
 		try {
 			commentLock.writeLock().lock();
 			if (this.comments.get(author) == null) {
@@ -177,7 +179,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 		
 		try {
 			commentLock.readLock().lock();
-			for (Map.Entry<String, SortedSet<Comment>> entry : comments.entrySet()) {
+			for (Map.Entry<String, NavigableSet<Comment>> entry : comments.entrySet()) {
 				result.addAll(this.formatComments(entry));
 			}
 		} finally { commentLock.readLock().unlock(); }
@@ -194,7 +196,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	public boolean rewin(String user) throws DataException {
 		if (user.equals(this.author)) throw new DataException(DataException.SAME_AUTHOR);
 		String copy = new String(user);
-		return this.rewinners.add(copy);
+		synchronized (rewinners) { return this.rewinners.add(copy); }
 	}
 	
 	@NotNull
@@ -214,6 +216,28 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	public double getIteration() { return this.iteration; }
 	
 	public void setIteration(double iter) { Common.allAndArgs(iter >= 0); this.iteration = iter; }
+	
+	public Map<Pair<String, Integer>, NavigableSet<Comment> > getNewComments(long start, long end){
+		Map<Pair<String, Integer>, NavigableSet<Comment> > res = new HashMap<>();
+		Pair<String, Integer> pair;
+		NavigableSet<Comment> set, aux;
+		try {
+			commentLock.readLock().lock();
+			for (String auth : comments.keySet()) {
+				aux = comments.get(auth);
+				pair = new Pair<>(new String(auth), aux.size());
+				set = new TreeSet<>();
+				Iterator<Comment> iter = aux.iterator();
+				while (iter.hasNext()) {
+					Comment c = iter.next();
+					if (c.getTime() < start) continue;
+					else if (c.getTime() > end) break;
+				}
+				res.put(pair, set);
+			}
+			return res;
+		} finally { commentLock.readLock().unlock(); }
+	}
 	
 	public int compareTo(Post other) {
 		if (this.idPost == other.idPost) return 0;

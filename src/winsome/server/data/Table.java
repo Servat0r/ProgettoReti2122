@@ -168,5 +168,37 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	public Iterator<T> keysIterator() { return this.map.keySet().iterator(); }
 
 	/** @return An iterator over the values in the table, in ascending order (by key). */
-	public Iterator<V> valuesIterator() { return this.map.values().iterator(); }
+	public Iterator<V> valuesIterator() { return new Iter<>(this); }
+	
+	public static class Iter<T extends Comparable<T>, V extends Indexable<T>> implements Iterator<V> {
+		
+		private boolean scanning = false;
+		private Table<T, V> table;
+		private Iterator<V> iterator;
+				
+		public Iter(Table<T,V> table) { this.table = table; }
+		
+		public synchronized void open() {
+			if (!scanning) {
+				scanning = true;
+				iterator = table.map.values().iterator();
+				table.lock.readLock().lock();
+			}
+		}
+		
+		public synchronized boolean hasNext() { return scanning && iterator.hasNext(); }
+
+		public synchronized V next() {
+			try {
+				if (scanning) return iterator.next();
+				else return null;
+			} catch (NoSuchElementException ex) {
+				scanning = false;
+				iterator = null;
+				table.lock.readLock().unlock();
+				throw ex;
+			}
+		}
+		
+	}
 }

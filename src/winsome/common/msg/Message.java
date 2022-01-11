@@ -73,6 +73,8 @@ public final class Message {
 		USERS = "users",
 		FOLLOWERS = "followers",
 		FOLLOWING = "following",
+		USLIST = "userlist",
+		PSLIST = "postlist",
 		FEED = "feed",
 		BTC = "btc",
 		NOTIFY = "notify";
@@ -87,7 +89,7 @@ public final class Message {
 	public static final Map<String, List<String>> CODES = Common.newHashMapFromLists(
 		COMMANDS,
 		Arrays.asList(
-			Arrays.asList(EMPTY, INFO, LIST, POST, WALLET, QUIT, EXIT),
+			Arrays.asList(EMPTY, INFO, USLIST, PSLIST, POST, WALLET, QUIT, EXIT),
 			emptyList,
 			emptyList,			
 			emptyList,			
@@ -208,19 +210,33 @@ public final class Message {
 	}
 	
 	/**
-	 * Creates a new list message (username + tags for "list following" and "list users", 
-	 * id+author+title for "show feed" and "blog").
+	 * Creates a new list message (username + tags).
 	 * @param items User info / Post info strings.
 	 * @param fmt Format string.
 	 * @param objs Objects to format.
-	 * @return A new (OK, LIST) Message object.
+	 * @return A new (OK, USLIST) Message object.
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newList(List<String> items, String fmt, Object...objs) {
+	public static Message newUserList(List<String> items, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
 		List<String> args = Common.toList(items, message);
-		try { return new Message(OK, LIST, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, USLIST, args); } catch (MessageException mex) { return null; }
+	}
+	
+	/**
+	 * Creates a new list message (id + author + title).
+	 * @param items User info / Post info strings.
+	 * @param fmt Format string.
+	 * @param objs Objects to format.
+	 * @return A new (OK, PSLIST) Message object.
+	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
+	 * @throws IllegalArgumentException If thrown by constructor.
+	 */
+	public static Message newPostList(List<String> items, String fmt, Object...objs) {
+		String message = String.format(fmt, objs);
+		List<String> args = Common.toList(items, message);
+		try { return new Message(OK, PSLIST, args); } catch (MessageException mex) { return null; }
 	}
 	
 	/**

@@ -47,9 +47,8 @@ public final class ServerUtils {
 		POST_NAUTHOR = "Non sei l'autore del post",
 		POST_AUTHOR = "Sei l'autore del post",
 		//Register
-		REG_OK = "Utente '%d' registrato",
-		REG_EXISTING = "Utente '%d' già esistente",
-		REG_USPW_INV = "Username o password non corretti",
+		REG_OK = "Utente '%s' registrato",
+		REG_EXISTING = "Utente '%s' già esistente",
 		//Follow
 		FOLLOW_ALREADY = "Segui già '%s'",
 		//Unfollow
@@ -84,15 +83,11 @@ public final class ServerUtils {
 		postTest = (list) -> {
 			if (list.size() != 2) return false;
 			else {
-				Debug.println(list);
 				String title = list.get(0), content = list.get(1);
 				title = Common.dequote(title); content = Common.dequote(content);
 				title = title.replace("\\\"", "\""); content = content.replace("\\\"", "\"");
 				//All dequoted
-				Debug.println(title);
-				Debug.println(content);
 				list.set(0, title); list.set(1, content);
-				Debug.println(list);
 				return testTitleComm(title, 20) && testTitleComm(content, 500);
 			}
 		},
@@ -105,7 +100,6 @@ public final class ServerUtils {
 		/* comment <idPost> <text> */
 		commentTest = (list) -> {
 			if (list.size() != 2) return false;
-			Debug.println(list);
 			String comment = Common.dequote(list.get(1));
 			comment = comment.replace("\\\"", "\"");
 			list.set( 1, comment);

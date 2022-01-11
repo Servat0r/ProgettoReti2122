@@ -11,3 +11,4 @@ src/winsome/other/
 *.json
 *.log
 *.sh
+*.bat

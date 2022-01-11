@@ -35,15 +35,19 @@ public final class Comment implements Comparable<Comment> {
 	}
 	
 	public int compareTo(Comment cmm) {
-		int a = this.idAuthor.compareTo(cmm.idAuthor);
-		int b = Long.valueOf(this.idPost).compareTo(cmm.idPost);
-		int c = Long.valueOf(this.time).compareTo(cmm.time);
-		int d = this.content.compareTo(cmm.content);
-		if (a != 0) return a;
-		else if (b != 0) return b;
-		else if (c != 0) return c;
-		else if (d != 0) return d;
-		else return 0;
+		long curr = time - cmm.time;
+		if (curr < 0) return -1;
+		else if (curr > 0) return 1;
+		else {
+			int a = this.idAuthor.compareTo(cmm.idAuthor);
+			if (a != 0) return a;
+			else {
+				curr = idPost - cmm.idPost;
+				if (curr < 0) return -1;
+				else if (curr > 0) return 1;
+				else return this.content.compareTo(cmm.content);
+			}
+		}
 	}
 	
 	public String getIdAuthor() { return idAuthor; }

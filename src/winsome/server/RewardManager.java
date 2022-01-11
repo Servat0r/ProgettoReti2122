@@ -100,6 +100,8 @@ final class RewardManager extends Thread {
 				completed.clear();
 			}
 			socket.leaveGroup(mcastaddr, net);
+		} catch (InterruptedException ie) {
+			logger.log("Exception caught: %s : %s", ie.getClass().getSimpleName(), ie.getMessage());
 		} catch (Exception ex) {
 			logger.logStackTrace(ex);
 			if (ex.getClass().equals(IllegalStateException.class)) server.signalIllegalState(ex);
