@@ -277,7 +277,6 @@ public final class WinsomeClient implements AutoCloseable {
 			
 			else if ( id.equals(CommandParser.WAIT) ) {
 				long millis = ConfigUtils.newLong.apply(args.get(0));
-				Debug.println(millis);
 				result = Common.sleep(millis * 1000);
 				out.println("End");
 			}

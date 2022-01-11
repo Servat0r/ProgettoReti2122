@@ -1053,7 +1053,7 @@ public final class WinsomeServer implements AutoCloseable {
 			logger.log("TCP Listener closed");
 			
 			try { rmiReg.unbind(ServerRMI.REGSERVNAME); }
-			catch (Exception ex) { Debug.debugExc(ex); }
+			catch (Exception ex) { logger.logStackTrace(ex); }
 			logger.log("RMI Registry closed");
 			
 			workers.shutdown();

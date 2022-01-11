@@ -16,6 +16,8 @@ import winsome.annotations.NotNull;
  */
 public final class Common {
 	
+	public static final String SEPAR = ": ";
+	
 	private Common() {}
 	
 	@NotNull
@@ -175,7 +177,7 @@ public final class Common {
 	public static String excStr(String format, Object ...objs) {
 		String fname = Thread.currentThread().getStackTrace()[2].getMethodName();
 		String msg = String.format(format, objs);
-		return (fname + Debug.DBGSEPAR + msg);
+		return (fname + SEPAR + msg);
 	}
 	
 	
@@ -193,7 +195,7 @@ public final class Common {
 	 */
 	public static void notNull(String msg, Object ...objs) throws NullPointerException {
 		for (int i = 0; i < objs.length; i++) if (objs[i] == null)
-			throw new NullPointerException( excStr("arg #%d%s%s", i+1, Debug.DBGSEPAR, msg) );
+			throw new NullPointerException( excStr("arg #%d%s%s", i+1, SEPAR, msg) );
 	}
 	
 	/**

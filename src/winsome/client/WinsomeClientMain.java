@@ -1,7 +1,6 @@
 package winsome.client;
 
 import winsome.common.config.*;
-import winsome.util.*;
 
 /**
  * Main class form WinsomeClient.
@@ -18,8 +17,6 @@ public final class WinsomeClientMain {
 		
 	public static void main(String[] args) {
 		String config = (args.length > 0 ? args[0] : CONFIG);
-		Debug.setDebug();
-		Debug.setDbgStream("client.dbg");
 		WinsomeClient client = null;
 		int exitCode = 0;
 		try {
@@ -35,7 +32,7 @@ public final class WinsomeClientMain {
 			catch (Exception ex) { ex.printStackTrace(); }
 			System.out.printf("%s%nMain exiting with code: %d%n", EXIT, exitCode);
 			System.out.flush();
-			Debug.exit(exitCode);
+			System.exit(exitCode);
 		}
 	}
 }

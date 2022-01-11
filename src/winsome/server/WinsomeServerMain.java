@@ -15,8 +15,6 @@ public final class WinsomeServerMain {
 	
 	public static void main(String[] args) {
 		String config = (args.length > 0 ? args[0] : CONFIG);
-		Debug.setDebug();
-		Debug.setDbgStream("server.dbg");
 		int exitCode = 0;
 		WinsomeServer server = null;
 		Thread t = null;
@@ -43,7 +41,7 @@ public final class WinsomeServerMain {
 			} finally {
 				System.out.printf("%s%nMain exiting with code: %d%n", result.getValue(), exitCode);
 				System.out.flush();
-				Debug.exit(exitCode);
+				System.exit(exitCode);
 			}
 		}
 	}
