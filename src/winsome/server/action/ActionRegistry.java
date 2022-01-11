@@ -271,6 +271,16 @@ public final class ActionRegistry {
 		} finally { this.lock.unlock(); }
 	}
 	
+	public long getNow() { return now; }
+	public long getTimeout() { return now + period; }
+	
+	public void putOldActions(List<Action> actions) {
+		try {
+			this.lock.lock();
+			this.registry.addAll(actions);
+		} finally { this.lock.unlock(); }
+	}
+	
 	@NotNull
 	public String toString() { return Common.jsonString(this); }
 }

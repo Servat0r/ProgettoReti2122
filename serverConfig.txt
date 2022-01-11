@@ -1,6 +1,6 @@
 # File di configurazione del server
 # Indirizzo del server
-# SERVER	=	192.168.1.120
+# SERVER	=	127.0.0.1
 
 # Porta TCP del server
 TCPPORT		=	6666
@@ -19,8 +19,6 @@ REGPORT		=	7777
 
 # Timeout del socket TCP
 TCPTIMEOUT	=	100000
-
-# Timeout del socket multicast
 
 # File json del server
 SERVERJSON	=	server.json

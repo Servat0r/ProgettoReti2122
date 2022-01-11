@@ -1,7 +1,6 @@
 # File di configurazione del client
 # Indirizzo del server
 SERVER		=	127.0.0.1
-#192.168.1.120
 
 # Porta TCP del server
 TCPPORT		=	6666
@@ -15,8 +14,11 @@ REGPORT		=	7777
 # Timeout della socket
 TIMEOUT		=	100000
 
-# Input
+# Input (se abilitato, accetta come input il file specificato)
 # INPUT		=	input.txt
+
+# Output (se abilitato, stampa l'output sul file specificato)
+# OUTPUT	= 	output.txt
 
 # Logging
 LOGGER		=	client.log

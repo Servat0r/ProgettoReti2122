@@ -216,29 +216,7 @@ public final class Post implements Indexable<Long>, Comparable<Post> {
 	public double getIteration() { return this.iteration; }
 	
 	public void setIteration(double iter) { Common.allAndArgs(iter >= 0); this.iteration = iter; }
-	
-	public Map<Pair<String, Integer>, NavigableSet<Comment> > getNewComments(long start, long end){
-		Map<Pair<String, Integer>, NavigableSet<Comment> > res = new HashMap<>();
-		Pair<String, Integer> pair;
-		NavigableSet<Comment> set, aux;
-		try {
-			commentLock.readLock().lock();
-			for (String auth : comments.keySet()) {
-				aux = comments.get(auth);
-				pair = new Pair<>(new String(auth), aux.size());
-				set = new TreeSet<>();
-				Iterator<Comment> iter = aux.iterator();
-				while (iter.hasNext()) {
-					Comment c = iter.next();
-					if (c.getTime() < start) continue;
-					else if (c.getTime() > end) break;
-				}
-				res.put(pair, set);
-			}
-			return res;
-		} finally { commentLock.readLock().unlock(); }
-	}
-	
+		
 	public int compareTo(Post other) {
 		if (this.idPost == other.idPost) return 0;
 		else return (this.idPost > other.idPost ? 1 : -1);

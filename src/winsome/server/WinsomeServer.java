@@ -30,7 +30,7 @@ import winsome.util.*;
  * @author Salvatore Correnti
  */
 public final class WinsomeServer implements AutoCloseable {
-	/* Instancw of the server */
+	/* Instance of the server */
 	private static WinsomeServer server = null;
 	
 	/* No illegal state occurred */
@@ -169,6 +169,8 @@ public final class WinsomeServer implements AutoCloseable {
 	@NotNull
 	private Pair<String, String> illegalState;
 	
+	private List<Action> oldActions;
+	
 	/**
 	 * Initializes a table by reading the given file and casting to the given type.
 	 * @param <T> Type of keys.
@@ -206,14 +208,14 @@ public final class WinsomeServer implements AutoCloseable {
 	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
 	 * @throws DeserializationException On failure when initializing transient fields of tables data.
 	 */
-	private void transientsInit(String serverJson, String userJson, String postJson, String walletJson, Table<String, User> users,
+	private void transientsInit(Map<String, String> configMap, String serverJson, String userJson, String postJson, String walletJson, Table<String, User> users,
 		Table<Long, Post> posts, Table<String, Wallet> wallets)
 			throws IOException, AlreadyBoundException, DeserializationException {		
 		this.serverJson = serverJson;
 		this.userJson = userJson;
 		this.postJson = postJson;
 		this.walletJson = walletJson;
-		this.transientsInit(users, posts, wallets);
+		this.transientsInit(configMap, users, posts, wallets);
 	}
 	
 	/**
@@ -225,7 +227,7 @@ public final class WinsomeServer implements AutoCloseable {
 	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
 	 * @throws DeserializationException On failure when initializing transient fields of tables data.
 	 */
-	private void transientsInit(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
+	private void transientsInit(Map<String, String> configMap, Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
 			throws IOException, AlreadyBoundException, DeserializationException {
 		if (postGen == null) this.postGen = new IDGen(1);
 		Post.setGen(postGen);
@@ -240,6 +242,8 @@ public final class WinsomeServer implements AutoCloseable {
 			iterationMap.putIfAbsent(p.key(), p.getIteration());
 		}
 		for (User u : this.users.getAll()) { u.deserialize(this.users, this.posts, this.wallets); }
+		
+		this.configFieldsInit(configMap);
 		PrintStream logStream = (logName != EMPTY ? new PrintStream(logName) : System.out);
 		this.logger = new Logger(LOGSTR, ERRLOGSTR, logStream);
 		this.tcpSockAddr = new InetSocketAddress(InetAddress.getByName(serverHost), tcpPort);
@@ -261,6 +265,8 @@ public final class WinsomeServer implements AutoCloseable {
 			new ThreadPoolExecutor.AbortPolicy()
 		);
 		this.actReg = new ActionRegistry( new Pair<>(rewPeriod, rewUnit) );
+		this.actReg.putOldActions(oldActions);
+		this.oldActions.clear();
 		this.rewManager = new RewardManager(
 			this,
 			this.mcastAddr,
@@ -294,16 +300,27 @@ public final class WinsomeServer implements AutoCloseable {
 	 */
 	private WinsomeServer(Map<String, String> configMap, Table<String, User> users, Table<Long, Post> posts,
 		Table<String, Wallet> wallets) throws IOException, AlreadyBoundException, DeserializationException {
+		Common.notNull(configMap);		
+		tagsMap = new ConcurrentHashMap<>();
+		oldActions = new ArrayList<Action>();
+		illegalState = WinsomeServer.ILLSTATE_OK;
+		this.transientsInit(configMap, users, posts, wallets);
+	}
+	
+	
+	private void configFieldsInit(Map<String, String> configMap) {
 		Common.notNull(configMap);
+		
+		
+		Integer tmp;			
 		
 		Function<String, String> newStr = ConfigUtils.newStr;
 		Function<String, Integer> newInt = ConfigUtils.newInt;
 		Function<String, Long> newLong = ConfigUtils.newLong;
 		Function<String, Double> newDouble = ConfigUtils.newDouble;
 		Function<String, TimeUnit> newTimeUnit = ConfigUtils.newTimeUnit;
-		
-		Integer tmp;			
-		logName = ConfigUtils.setValueOrDefault(configMap, "logger", newStr, EMPTY);
+
+		logName = ConfigUtils.setValueOrDefault(configMap, "logger", newStr, (logName == null ? EMPTY : logName));
 		
 		serverJson = ConfigUtils.setValueOrDefault(configMap, "serverjson", newStr, DFLSERVERJSON);
 		userJson = ConfigUtils.setValueOrDefault(configMap, "userjson", newStr, DFLUSERJSON);
@@ -334,10 +351,6 @@ public final class WinsomeServer implements AutoCloseable {
 		rwAuthPerc = ConfigUtils.setValueOrDefault(configMap, "rwauthperc", newDouble, DFLREWAUTH);
 		rwCurPerc = ConfigUtils.setValueOrDefault(configMap, "rwcurperc", newDouble, DFLREWCURS);
 		rewUnit = ConfigUtils.setValueOrDefault(configMap, "rwperiodunit", newTimeUnit, TimeUnit.SECONDS);
-		
-		tagsMap = new ConcurrentHashMap<>();
-		illegalState = WinsomeServer.ILLSTATE_OK;
-		this.transientsInit(users, posts, wallets);
 	}
 	
 	/**
@@ -373,7 +386,7 @@ public final class WinsomeServer implements AutoCloseable {
 				if (!server.illegalState.equals(ILLSTATE_OK)) {
 					String message = String.format("%s : %s", server.illegalState.getKey(), server.illegalState.getValue());
 					throw new IllegalStateException(message);
-				} else server.transientsInit(serverJson, userJson, postJson, walletJson, users, posts, wallets);
+				} else server.transientsInit(configMap, serverJson, userJson, postJson, walletJson, users, posts, wallets);
 			}
 			else server = new WinsomeServer(configMap, users, posts, wallets);
 			WinsomeServer.server = server;
@@ -415,7 +428,7 @@ public final class WinsomeServer implements AutoCloseable {
 		while (state == State.ACTIVE) {
 			
 			try { selected = selector.select(); }
-			catch (ClosedSelectorException cse) { logger.log("Selector closed [0]"); break; }
+			catch (ClosedSelectorException cse) { break; }
 			finally {
 				illegalState = this.getIllegalState();
 				if ( !illegalState.equals(ILLSTATE_OK) ) {
@@ -425,7 +438,6 @@ public final class WinsomeServer implements AutoCloseable {
 			}
 			if (state == State.CLOSING) break;
 			else if (selected > 0) {
-				logger.log("Selected %d key(s)", selected);
 				keysIter = selector.selectedKeys().iterator();
 				while (keysIter.hasNext()) {
 					
@@ -450,7 +462,7 @@ public final class WinsomeServer implements AutoCloseable {
 						Message msg = (Message)selectKey.attachment();
 						MessageBuffer buf = new MessageBuffer(bufferCap);
 						String msgstr = "Sending response to " + (u != null ? u : "anonymous user");
-						logger.log("%s: it is (%s, %s - %s)", msgstr, msg.getIdStr(), msg.getParamStr(), msg.getArguments().toString());
+						logger.log(msgstr);
 						boolean sent = true;
 						try { sent = msg.sendToChannel(client, buf); }
 						catch (IOException ioe) { sent = false; }
@@ -971,11 +983,11 @@ public final class WinsomeServer implements AutoCloseable {
 	 * @return A Message object to send back to the client.
 	 */
 	@NotNull
-	Message quitReq(SelectionKey skey) {
+	void quitReq(SelectionKey skey) {
 		SocketChannel client = (SocketChannel)skey.channel();
-		if (loggedMap.containsKey(client)) return Message.newError(ServerUtils.PERMDEN + ": " + ServerUtils.U_STILL_LOGGED);
-		else if (!unlogged.contains(client)) return Message.newError(ServerUtils.UNKNOWN_CHAN);
-		else { unlogged.remove(client); return Message.newQuit(Message.OK); }
+		loggedMap.remove(client);
+		unlogged.remove(client);
+		this.closeConnection(skey);
 	}
 	
 	protected final int bufferCap() { return bufferCap; }
@@ -1060,6 +1072,11 @@ public final class WinsomeServer implements AutoCloseable {
 			workersFactory.interruptAll();
 			workersFactory.joinAll();
 			logger.log("Workers pool closed");
+			
+			List<Action> act = new ArrayList<>();
+			actReg.getActions(act);
+			this.oldActions.addAll(act);
+			logger.log("Old actions saved");
 			
 			for (SocketChannel chan : loggedMap.keySet()) chan.close();
 			for (SocketChannel chan : unlogged) chan.close();

@@ -1,13 +1,10 @@
 package winsome.server;
 
 import java.lang.reflect.Type;
-import java.util.*;
-import java.util.function.*;
 
 import com.google.gson.reflect.TypeToken;
 
 import winsome.server.data.*;
-import winsome.util.*;
 
 /**
  * Common server-related constants.
@@ -61,51 +58,7 @@ public final class ServerUtils {
 		//Bitcoin wallet
 		BTC_CONV = "Errore durante la conversione del portafoglio in bitcoin";
 	
-	private static final boolean testLong(String str){
-		Common.notNull(str);
-		try { Long.parseLong(str); return true; }
-		catch (Exception ex) { return false; }
-	}
-	
-	private static final boolean testTitleComm(String str, int len) {
-		Common.allAndArgs(str != null, len >= 0);
-		return (str.length() <= len);
-	}
-	
-	private static final boolean testRate(String str) {
-		Common.notNull(str);
-		return (str.equals("+1") || str.equals("-1"));
-	}
-	
-	/* Default checkers for client command parser. */
-	public static final Predicate<List<String>>
-		/* Checker for post <title> <comment> command */
-		postTest = (list) -> {
-			if (list.size() != 2) return false;
-			else {
-				String title = list.get(0), content = list.get(1);
-				title = Common.dequote(title); content = Common.dequote(content);
-				title = title.replace("\\\"", "\""); content = content.replace("\\\"", "\"");
-				//All dequoted
-				list.set(0, title); list.set(1, content);
-				return testTitleComm(title, 20) && testTitleComm(content, 500);
-			}
-		},
-		/* Commands with a single numeric argument */
-		numTest = (list) -> { return (list.size() == 1 ? testLong(list.get(0)) : false); },
-		/* rate <idPost> <vote> */
-		rateTest = (list) -> {
-			return (list.size() == 2) && testLong(list.get(0)) && testRate(list.get(1));
-		},
-		/* comment <idPost> <text> */
-		commentTest = (list) -> {
-			if (list.size() != 2) return false;
-			String comment = Common.dequote(list.get(1));
-			comment = comment.replace("\\\"", "\"");
-			list.set( 1, comment);
-			return testLong(list.get(0));
-		};
-	
+
 	/* TypeTokens for server tables */
 	protected static final Type
 		USERSTYPE = new TypeToken< Table<String, User> >() {}.getType(),

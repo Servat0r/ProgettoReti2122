@@ -42,7 +42,7 @@ final class RewardManager extends Thread {
 	 * 2. Aggiorna i portafogli degli utenti.
 	 */
 	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
-		double rewAuth, double rewCur, Map<Long, Double> iterationMap) throws IOException {
+		double rewAuth, double rewCur, Map<Long, Double> iterationMap, List<Action> toReward) throws IOException {
 		
 		Common.notNull(server, mcastAddr, wallets, registry);
 		Common.allAndArgs(mcastPort >= 0, rewAuth >= 0.0, rewCur >= 0, rewAuth + rewCur == TOTREWPERC);
@@ -54,8 +54,19 @@ final class RewardManager extends Thread {
 		this.wallets = wallets;
 		this.registry = registry;
 		this.calculator = new RewardCalculatorImpl(rewAuth, rewCur, iterationMap);
+		if ((toReward != null) && !toReward.isEmpty()) {
+			Map<String, Double> rewards = calculator.computeReward(toReward);
+			for (String user : rewards.keySet()) {
+				Wallet w = wallets.get(user);
+				Common.allAndState( w.newTransaction(rewards.get(user)) );
+			}
+		}
 	}
 	
+	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort, Table<String, Wallet> wallets,
+		ActionRegistry registry, double rewAuth, double rewCur, Map<Long, Double> iterationMap) throws IOException {
+		this(server, mcastAddr, socketPort, mcastPort, wallets, registry, rewAuth, rewCur, iterationMap, null);
+	}
 	
 	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort,
 		Table<String, Wallet> wallets, Pair<Long, TimeUnit> pair, double rwAuthPerc, double rwCurPerc,

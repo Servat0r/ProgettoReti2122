@@ -21,7 +21,7 @@ final class WinsomeClientHelp {
 	private static <K,V> Map<K, V> newMap(List<K> keys, List<V> vals){ return Common.newHashMapFromLists(keys, vals); }
 	
 	/** Offset for printing help guide lines. */
-	private static String OFFSET = " > ";
+	private static String OFFSET = "  ";
 	
 	private static final List<String> COMMANDS = list(
 		CommandParser.REG,
@@ -46,7 +46,6 @@ final class WinsomeClientHelp {
 		
 		CommandParser.QUIT,
 		CommandParser.EXIT,
-		CommandParser.WHOAMI,
 		CommandParser.CLEAR,
 		CommandParser.WAIT
 	);
@@ -175,10 +174,6 @@ final class WinsomeClientHelp {
 					+ "help message for the command specified.")
 			),
 			quitMap, quitMap,
-			newMap(
-				list(Command.EMPTY),
-				list("Prints the current logged user if any, otherwise prints 'No user logged'")
-			),
 			newMap(
 				list(Command.EMPTY),
 				list("Attempts to clear console screen. Particularly, attempts to execute the command 'clear' as a subprocess,\n"

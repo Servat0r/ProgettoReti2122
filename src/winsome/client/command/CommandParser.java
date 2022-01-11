@@ -39,7 +39,6 @@ public final class CommandParser implements AutoCloseable, Iterable<CommandDef> 
 		HELP = "help",
 		QUIT = "quit",
 		EXIT = "exit",
-		WHOAMI = "whoami",
 		CLEAR = "clear",
 		WAIT = "wait";
 	
@@ -80,6 +79,51 @@ public final class CommandParser implements AutoCloseable, Iterable<CommandDef> 
 			}
 			return -1;
 		}; /* Empty titles and contents NOT allowed! */
+
+		private static final boolean testLong(String str){
+			Common.notNull(str);
+			try { Long.parseLong(str); return true; }
+			catch (Exception ex) { return false; }
+		}
+		
+		private static final boolean testTitleComm(String str, int len) {
+			Common.allAndArgs(str != null, len >= 0);
+			return (str.length() <= len);
+		}
+		
+		private static final boolean testRate(String str) {
+			Common.notNull(str);
+			return (str.equals("+1") || str.equals("-1"));
+		}
+		
+		/* Default checkers. */
+		public static final Predicate<List<String>>
+			/* Checker for post <title> <comment> command */
+			postTest = (list) -> {
+				if (list.size() != 2) return false;
+				else {
+					String title = list.get(0), content = list.get(1);
+					title = Common.dequote(title); content = Common.dequote(content);
+					title = title.replace("\\\"", "\""); content = content.replace("\\\"", "\"");
+					//All dequoted
+					list.set(0, title); list.set(1, content);
+					return testTitleComm(title, 20) && testTitleComm(content, 500);
+				}
+			},
+			/* Commands with a single numeric argument */
+			numTest = (list) -> { return (list.size() == 1 ? testLong(list.get(0)) : false); },
+			/* rate <idPost> <vote> */
+			rateTest = (list) -> {
+				return (list.size() == 2) && testLong(list.get(0)) && testRate(list.get(1));
+			},
+			/* comment <idPost> <text> */
+			commentTest = (list) -> {
+				if (list.size() != 2) return false;
+				String comment = Common.dequote(list.get(1));
+				comment = comment.replace("\\\"", "\"");
+				list.set( 1, comment);
+				return testLong(list.get(0));
+			};		
 	
 	@NotNull
 	private final Set<CommandDef> cdefs;
@@ -137,20 +181,20 @@ public final class CommandParser implements AutoCloseable, Iterable<CommandDef> 
 		userMap.put(Command.EMPTY, new CommandArgs(ALPHANUM));
 		
 		Map<String, CommandArgs> postMap = new HashMap<>();
-		postMap.put(Command.EMPTY, new CommandArgs(ServerUtils.postTest, QUOTED, QUOTED) );
+		postMap.put(Command.EMPTY, new CommandArgs(postTest, QUOTED, QUOTED) );
 		
 		Map<String, CommandArgs> showMap = new HashMap<>();
 		showMap.put(FEED, CommandArgs.NULL);
-		showMap.put(POST, new CommandArgs(ServerUtils.numTest, NUM));
+		showMap.put(POST, new CommandArgs(numTest, NUM));
 		
 		Map<String, CommandArgs> numMap = new HashMap<>();
-		numMap.put(Command.EMPTY, new CommandArgs(ServerUtils.numTest, NUM));
+		numMap.put(Command.EMPTY, new CommandArgs(numTest, NUM));
 		
 		Map<String, CommandArgs> rateMap = new HashMap<>();
-		rateMap.put(Command.EMPTY, new CommandArgs(ServerUtils.rateTest, NUM, RATESTR));
+		rateMap.put(Command.EMPTY, new CommandArgs(rateTest, NUM, RATESTR));
 		
 		Map<String, CommandArgs> commentMap = new HashMap<>();
-		commentMap.put(Command.EMPTY, new CommandArgs(ServerUtils.commentTest, NUM, QUOTED) );
+		commentMap.put(Command.EMPTY, new CommandArgs(commentTest, NUM, QUOTED) );
 		
 		Map<String, CommandArgs> walletMap = new HashMap<>();
 		walletMap.put(Command.EMPTY, CommandArgs.NULL);
@@ -179,7 +223,6 @@ public final class CommandParser implements AutoCloseable, Iterable<CommandDef> 
 			new CommandDef(HELP, helpMap),
 			new CommandDef(QUIT, idOnlyMap),
 			new CommandDef(EXIT, idOnlyMap),
-			new CommandDef(WHOAMI, idOnlyMap),
 			new CommandDef(CLEAR, idOnlyMap),
 			new CommandDef(WAIT, numMap)
 		);

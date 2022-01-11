@@ -44,7 +44,7 @@ final class Worker implements Runnable {
 			param = msg.getParamStr(); //Cannot throw MessageException
 			String u = server.translateChannel(client);
 			String msgstr = (u != null ? "Received request from user " + u : "Received request from anonymous user ");
-			server.logger().log("%s: it is (%s, %s - %s)", msgstr, id, param, msg.getArguments().toString());
+			server.logger().log(msgstr);
 			List<String> args = msg.getArguments();
 			msg = null;
 			switch(id) {
@@ -83,13 +83,15 @@ final class Worker implements Runnable {
 					break;
 				}
 				case Message.QUIT :
-				case Message.EXIT : { msg = server.quitReq(skey); break; }
+				case Message.EXIT : { server.quitReq(skey); return; }
 				default : break;
 			}
 			if (msg == null) msg = Message.newError(Message.UNKNOWN_MSG);
 			skey.attach(msg);
 			skey.interestOps(SelectionKey.OP_WRITE);
 			server.selector().wakeup();
+		} catch (InterruptedException ie) {
+			msg = Message.newError(ServerUtils.INTERROR);
 		} catch (Exception ex) { excHandler.accept(skey, ex); }
 	}
 	

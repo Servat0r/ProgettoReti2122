@@ -236,11 +236,16 @@ public final class WinsomeClient implements AutoCloseable {
 		
 		try {
 			if ( id.equals(Message.REG) ) {
-				List<String> sbargs = new ArrayList<>();
-				for (int i = 2; i < args.size(); i++) sbargs.add(args.get(i));
-				Pair<Boolean, String> pair = this.register(args.get(0), args.get(1), sbargs);
-				result = pair.getKey().booleanValue();
-				this.out.println(pair.getValue());
+				if (this.isUserSet()) {
+					this.out.println("Error : there is a user already logged in");
+					result = false;
+				} else {
+					List<String> sbargs = new ArrayList<>();
+					for (int i = 2; i < args.size(); i++) sbargs.add(args.get(i));
+					Pair<Boolean, String> pair = this.register(args.get(0), args.get(1), sbargs);
+					result = pair.getKey().booleanValue();
+					this.out.println(pair.getValue());
+				}
 			}
 			
 			else if ( id.equals(Message.LOGIN) ) {
@@ -252,18 +257,12 @@ public final class WinsomeClient implements AutoCloseable {
 			else if ( id.equals(Message.QUIT) || id.equals(Message.EXIT)) {
 				if (this.isUserSet()) return this.printError(ALREADY_LOGGED);
 				else {
-					result = this.quitReq();
-					if (result) this.setState(State.EXIT);
+					this.quitReq();
+					this.setState(State.EXIT);
+					result = true;
 				}
 			}
-			
-			else if ( id.equals(CommandParser.WHOAMI) ) {
-				String res = this.getUsername();
-				if (res != null) this.out.println(res);
-				else this.out.println(NONE_LOGGED);
-				result = true;
-			}
-						
+									
 			else if ( id.equals(CommandParser.CLEAR) ) {
 				int code;
 				try { code = new ProcessBuilder("clear").inheritIO().start().waitFor(); }
@@ -817,25 +816,14 @@ public final class WinsomeClient implements AutoCloseable {
 		return true;
 	}
 	
-	public boolean quitReq() throws IOException {
+	public void quitReq() throws IOException {
 		try {
 			Message msg = new Message(Message.QUIT, Message.EMPTY, null);
-			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
-			else {
-				msg = Message.recvFromStream(tcpIn);
-				String[] strCodes = msg.getIdParam();
-				String id = strCodes[0], param = strCodes[1];
-				List<String> l = msg.getArguments();
-				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
-				String confirm = l.remove(0);
-				if (id.equals(Message.OK)) {
-					if (param.equals(Message.QUIT) || param.equals(Message.EXIT))
-						return this.printOK(confirm);
-					else return this.printError(ILL_RESPONSE);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
-				else return this.printError(ILL_RESPONSE);
-			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
+			if (!msg.sendToStream(tcpOut)) {
+				this.printError(CLOSED);
+				out.println("Exiting after connection reset by server");
+			} else this.printOK("Exiting");
+		} catch (MessageException mex) { logger.logStackTrace(mex); }		
 	}
 	
 	public Logger logger() { return logger; }
