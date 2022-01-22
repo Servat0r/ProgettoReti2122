@@ -21,27 +21,11 @@ public final class Index<T extends Comparable<T>, V extends Indexable<T>> {
 	private transient ReentrantReadWriteLock lock;
 	
 	public Index(Table<T,V> table) {
-		Common.notNull(table);
 		this.keys = new TreeSet<>();
 		this.table = table;
 		this.lock = new ReentrantReadWriteLock();
 	}
-	
-	public synchronized boolean isDeserialized() { return (table != null && lock != null); }
-	
-	/**
-	 * Restores transient fields after deserialization from JSON.
-	 * @param table Table from which to update maintained keys.
-	 * @throws DeserializationException If table is not already deserialized.
-	 */	
-	public synchronized void deserialize(Table<T, V> table) throws DeserializationException {
-		Common.notNull(table);
-		if (!table.isDeserialized()) throw new DeserializationException();
-		if (this.table == null) this.table = table;
-		this.keys.retainAll(table.keySet());
-		if (lock == null) lock = new ReentrantReadWriteLock();
-	}
-	
+		
 	/**
 	 * @param key The key.
 	 * @return The item in the table with the given key if present, null otherwise.

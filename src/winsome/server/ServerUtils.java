@@ -1,11 +1,5 @@
 package winsome.server;
 
-import java.lang.reflect.Type;
-
-import com.google.gson.reflect.TypeToken;
-
-import winsome.server.data.*;
-
 /**
  * Common server-related constants.
  * @author Salvatore Correnti
@@ -57,11 +51,4 @@ public final class ServerUtils {
 		REWON_ALREADY = "Hai già fatto il rewin di questo post",
 		//Bitcoin wallet
 		BTC_CONV = "Errore durante la conversione del portafoglio in bitcoin";
-	
-
-	/* TypeTokens for server tables */
-	protected static final Type
-		USERSTYPE = new TypeToken< Table<String, User> >() {}.getType(),
-		POSTSTYPE = new TypeToken< Table<Long, Post> >(){}.getType(),
-		WALLETSTYPE = new TypeToken < Table<String, Wallet> >(){}.getType();
 }

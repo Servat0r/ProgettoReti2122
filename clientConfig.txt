@@ -15,7 +15,7 @@ REGPORT		=	7777
 TIMEOUT		=	100000
 
 # Input (se abilitato, accetta come input il file specificato)
-# INPUT		=	input.txt
+INPUT		=	input.txt
 
 # Output (se abilitato, stampa l'output sul file specificato)
 # OUTPUT	= 	output.txt

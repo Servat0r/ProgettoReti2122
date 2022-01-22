@@ -39,8 +39,11 @@ public final class WinsomeClient implements AutoCloseable {
 	
 	/* Logging strings */
 	private static final String
-		LOGSTR = "CLIENT @ %s: { %s : %s }",
-		ERRLOGSTR = "CLIENT @ %s : ERROR @ %s : %s";
+		LOGHEAD = "CLIENT",
+		START = "{ ",
+		END = " }",
+		LOGSEPAR = " : ",
+		ERRSEPAR1 = " : ERROR ";
 	
 	private static final String
 		WNOTIFIERNAME = "WalletNotifier",
@@ -266,11 +269,11 @@ public final class WinsomeClient implements AutoCloseable {
 			else if ( id.equals(CommandParser.CLEAR) ) {
 				int code;
 				try { code = new ProcessBuilder("clear").inheritIO().start().waitFor(); }
-				catch (IOException ioe) { logger.logStackTrace(ioe); code = 1; }
+				catch (IOException ioe) { logger.logException(ioe); code = 1; }
 				try { if (code != 0) code = new ProcessBuilder("cls").inheritIO().start().waitFor(); }
-				catch (IOException ioe) { logger.logStackTrace(ioe); code = 1; }
+				catch (IOException ioe) { logger.logException(ioe); code = 1; }
 				try { if (code != 0) code = new ProcessBuilder("cmd", "/c", "cls").inheritIO().start().waitFor(); }
-				catch (IOException ioe) { logger.logStackTrace(ioe); code = 1; }
+				catch (IOException ioe) { logger.logException(ioe); code = 1; }
 				result = (code == 0);
 			}
 			
@@ -370,7 +373,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
+		} catch (MessageException mex) { logger.logException(mex); return false; }		
 	}
 	
 	/**
@@ -397,7 +400,7 @@ public final class WinsomeClient implements AutoCloseable {
 				return this.printOK("%s%n%s", confirm, output);
 			} else if (id.equals(Message.ERR)) return this.printError(confirm);
 			else return this.printError(ILL_RESPONSE);
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }				
+		} catch (MessageException mex) { logger.logException(mex); return false; }				
 	}
 	
 	/**
@@ -468,7 +471,7 @@ public final class WinsomeClient implements AutoCloseable {
 		input = ConfigUtils.setValueOrDefault(configMap, "input", newInStr, System.in);
 		out = ConfigUtils.setValueOrDefault(configMap, "output", newPrStr, System.out);
 		stream = ConfigUtils.setValueOrDefault(configMap, "logger", newPrStr, System.out);
-		logger = new Logger(LOGSTR, ERRLOGSTR, stream);
+		logger = new Logger(LOGHEAD, LOGHEAD, START, END, LOGSEPAR, LOGSEPAR, ERRSEPAR1, LOGSEPAR, stream);
 		
 		this.parser = CommandParser.defaultParser(input);
 		this.clHandler = new ClientRMIImpl(this);
@@ -508,7 +511,7 @@ public final class WinsomeClient implements AutoCloseable {
 			else if (cmd.equals(Command.SKIP)) {}
 			else {
 				try { this.dispatch(cmd); }
-				catch (IOException e) { logger.logStackTrace(e); retCode = 1; break; }
+				catch (IOException e) { logger.logException(e); retCode = 1; break; }
 			}
 			out.println();
 		}
@@ -524,7 +527,7 @@ public final class WinsomeClient implements AutoCloseable {
 	public boolean login(String username, String password) throws IOException {
 		Common.notNull(username, password);
 		try {
-			Message msg = new Message(Message.LOGIN, Message.EMPTY, Common.toList(username, password) );
+			Message msg = new Message(Message.LOGIN, Message.EMPTY, CollectionsUtils.toList(username, password) );
 			if ( !msg.sendToStream(tcpOut) ) return this.printError(CLOSED);
 			
 			msg = Message.recvFromStream(tcpIn);
@@ -568,13 +571,13 @@ public final class WinsomeClient implements AutoCloseable {
 			
 			} else return this.printError(ILL_RESPONSE);
 			
-		} catch (MessageException | IllegalArgumentException ex) { logger.logStackTrace(ex); return false; }
+		} catch (MessageException | IllegalArgumentException ex) { logger.logException(ex); return false; }
 	}
 	
 	public boolean logout(String username) throws IOException, InterruptedException {
 		Common.notNull(username);
 		try {
-			Message msg = new Message(Message.LOGOUT, Message.EMPTY, Common.toList(username));
+			Message msg = new Message(Message.LOGOUT, Message.EMPTY, CollectionsUtils.toList(username));
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			if ((msg = Message.recvFromStream(tcpIn)) == null) return this.printError(CLOSED);
 			String id = msg.getIdStr(), param = msg.getParamStr();
@@ -595,7 +598,7 @@ public final class WinsomeClient implements AutoCloseable {
 				return this.printOK(confirm);
 			} else if (id.equals(Message.ERR)) return this.printError(confirm);
 			else return this.printError(ILL_RESPONSE);
-		} catch (MessageException ex) { logger.logStackTrace(ex); return false; }
+		} catch (MessageException ex) { logger.logException(ex); return false; }
 	}
 	
 	public boolean listUsers() throws IOException {
@@ -622,7 +625,7 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }
+		} catch (MessageException mex) { logger.logException(mex); return false; }
 	}
 	
 	public boolean listFollowers() {
@@ -656,17 +659,17 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }
+		} catch (MessageException mex) { logger.logException(mex); return false; }
 	}
 	
 	public boolean followUser(String idUser) throws IOException {
 		Common.notNull(idUser);
-		return this.simpleRequest(Message.FOLLOW, Message.EMPTY, Common.toList(idUser));
+		return this.simpleRequest(Message.FOLLOW, Message.EMPTY, CollectionsUtils.toList(idUser));
 	}
 	
 	public boolean unfollowUser(String idUser) throws IOException {
 		Common.notNull(idUser);
-		return this.simpleRequest(Message.UNFOLLOW, Message.EMPTY, Common.toList(idUser));
+		return this.simpleRequest(Message.UNFOLLOW, Message.EMPTY, CollectionsUtils.toList(idUser));
 	}
 	
 	public boolean viewBlog() throws IOException { 
@@ -693,12 +696,12 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }
+		} catch (MessageException mex) { logger.logException(mex); return false; }
 	}
 	
 	public boolean createPost(String title, String content) throws IOException {
 		Common.notNull(title, content);
-		return this.simpleRequest(Message.POST, null, Common.toList(title, content));
+		return this.simpleRequest(Message.POST, null, CollectionsUtils.toList(title, content));
 	}
 	
 	public boolean showFeed() throws IOException {
@@ -722,13 +725,13 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
+		} catch (MessageException mex) { logger.logException(mex); return false; }		
 	}
 	
 	public boolean showPost(long idPost) throws IOException {
 		Common.allAndArgs(idPost >= 0);
 		try {
-			Message msg = new Message( Message.SHOW, Message.POST, Common.toList(Long.toString(idPost)) );
+			Message msg = new Message( Message.SHOW, Message.POST, CollectionsUtils.toList(Long.toString(idPost)) );
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
@@ -746,27 +749,27 @@ public final class WinsomeClient implements AutoCloseable {
 				} else if (id.equals(Message.ERR)) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
-		} catch (MessageException mex) { logger.logStackTrace(mex); return false; }		
+		} catch (MessageException mex) { logger.logException(mex); return false; }		
 	}
 	
 	public boolean deletePost(long idPost) throws IOException {
 		Common.allAndArgs(idPost >= 0);
-		return this.simpleRequest(Message.DELETE, Message.EMPTY, Common.toList(Long.toString(idPost)));
+		return this.simpleRequest(Message.DELETE, Message.EMPTY, CollectionsUtils.toList(Long.toString(idPost)));
 	}
 	
 	public boolean rewinPost(long idPost) throws IOException {
 		Common.allAndArgs(idPost >= 0);
-		return this.simpleRequest(Message.REWIN, Message.EMPTY, Common.toList(Long.toString(idPost)));
+		return this.simpleRequest(Message.REWIN, Message.EMPTY, CollectionsUtils.toList(Long.toString(idPost)));
 	}
 	
 	public boolean ratePost(long idPost, String vote) throws IOException {
 		Common.allAndArgs(idPost >= 0, vote != null);
-		return this.simpleRequest( Message.RATE, null, Common.toList(Long.toString(idPost), vote) );
+		return this.simpleRequest( Message.RATE, null, CollectionsUtils.toList(Long.toString(idPost), vote) );
 	}
 	
 	public boolean addComment(long idPost, String comment) throws IOException {
 		Common.allAndArgs(idPost >= 0, comment != null);
-		return this.simpleRequest(Message.COMMENT, null, Common.toList(Long.toString(idPost), comment) );
+		return this.simpleRequest(Message.COMMENT, null, CollectionsUtils.toList(Long.toString(idPost), comment) );
 	}
 	
 	/**
@@ -823,7 +826,7 @@ public final class WinsomeClient implements AutoCloseable {
 				this.printError(CLOSED);
 				out.println("Exiting after connection reset by server");
 			} else this.printOK("Exiting");
-		} catch (MessageException mex) { logger.logStackTrace(mex); }		
+		} catch (MessageException mex) { logger.logException(mex); }		
 	}
 	
 	public Logger logger() { return logger; }

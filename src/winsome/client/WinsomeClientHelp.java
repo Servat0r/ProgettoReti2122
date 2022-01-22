@@ -16,9 +16,9 @@ final class WinsomeClientHelp {
 	private WinsomeClientHelp() {}
 	
 	@SafeVarargs
-	private static <T> List<T> list(T... args){ return Common.toList(args); }
+	private static <T> List<T> list(T... args){ return CollectionsUtils.toList(args); }
 	
-	private static <K,V> Map<K, V> newMap(List<K> keys, List<V> vals){ return Common.newHashMapFromLists(keys, vals); }
+	private static <K,V> Map<K, V> newMap(List<K> keys, List<V> vals){ return CollectionsUtils.newHashMapFromCollections(keys, vals); }
 	
 	/** Offset for printing help guide lines. */
 	private static String OFFSET = "  ";

@@ -21,7 +21,7 @@ public final class WinsomeServerMain {
 		Pair<Boolean, String> result = new Pair<>(false, "Error during execution");
 		try {
 			Map<String, String> configMap = ConfigParser.parseFile(config, ConfigParser.LOWER);
-			if (WinsomeServer.createServer(configMap) && (server = WinsomeServer.getServer()) != null) {
+			if ( (server = WinsomeServer.createServer(configMap)) != null) {
 				t = new Thread(new ShutdownHook());
 				t.setName(ShutdownHook.DFLNAME);
 				Runtime.getRuntime().addShutdownHook(t);
@@ -29,13 +29,13 @@ public final class WinsomeServerMain {
 				exitCode = (result.getKey() ? 0 : 1);
 			} else exitCode = 1;
 		} catch (Exception ex) { 
-			if (server != null) server.logger().logStackTrace(ex);
+			if (server != null) server.logger().logException(ex);
 			else ex.printStackTrace();
 			exitCode = 1;
 		} finally {
-			try { t.join(); server.logger().log("Joined");}
+			try { t.join(); if (server != null) server.logger().log("Joined");}
 			catch (Exception ex) {
-				if (server != null) server.logger().logStackTrace(ex);
+				if (server != null) server.logger().logException(ex);
 				else ex.printStackTrace();
 				exitCode = 1;
 			} finally {

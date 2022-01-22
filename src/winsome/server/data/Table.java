@@ -1,14 +1,15 @@
 package winsome.server.data;
 
-import java.lang.reflect.Type;
+import java.io.*;
 import java.util.*;
 import java.util.concurrent.locks.*;
+import java.util.function.*;
 
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.*;
+import com.google.gson.stream.*;
 
 import winsome.annotations.NotNull;
-import winsome.util.Common;
-import winsome.util.Serialization;
+import winsome.util.*;
 
 /**
  * A class representing a table of objects indexed by a unique "key", inspired from a database table.
@@ -19,17 +20,19 @@ import winsome.util.Serialization;
  */
 public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	
+	public static final String
+		SIZE = "size",
+		ITEMS = "items";
+	
 	@NotNull
 	private final NavigableMap<T, V> map;
 	private transient ReentrantReadWriteLock lock = null;
-	private transient Type type = null;
 	
 	public Table() {
 		this.map = new TreeMap<>();
 		this.lock = new ReentrantReadWriteLock();
-		this.type = new TypeToken<Table<T,V>>(){}.getType();
 	}
-	
+		
 	/**
 	 * Puts the given element in the table if absent, otherwise returns the already existing
 	 *  element with that key.
@@ -37,7 +40,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	 * @return null if the element was absent, the already existing element as above otherwise.
 	 * @throws NullPointerException If elem == null.
 	 */
-	public boolean putIfAbsent(V elem) {
+	public boolean add(V elem) {
 		Common.notNull(elem);
 		T key = elem.key();
 		try {
@@ -117,18 +120,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 		Common.notNull(key);
 		try { lock.readLock().lock(); return this.map.containsKey(key); } finally { lock.readLock().unlock(); }
 	}
-	
-	/**
-	 * Restores transient fields after deserialization from JSON.
-	 * @throws DeserializationException On failure.
-	 */
-	public synchronized void deserialize() throws DeserializationException {
-		if (lock == null) lock = new ReentrantReadWriteLock();
-		if (type == null) type = new TypeToken<Table<T,V>>(){}.getType();
-	}
-	
-	public synchronized boolean isDeserialized() { return (lock != null && type != null); }
-	
+		
 	/**
 	 * @param ext Sorted set of keys.
 	 * @param retain If true, removes from ext all the keys that do not have a corresponding
@@ -168,7 +160,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 	public Iterator<T> keysIterator() { return this.map.keySet().iterator(); }
 
 	/** @return An iterator over the values in the table, in ascending order (by key). */
-	public Iterator<V> valuesIterator() { return new Iter<>(this); }
+	public Table.Iter<T, V> valuesIterator() { return new Iter<>(this); }
 	
 	public static class Iter<T extends Comparable<T>, V extends Indexable<T>> implements Iterator<V> {
 		
@@ -187,7 +179,7 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 		}
 		
 		public synchronized boolean hasNext() { return scanning && iterator.hasNext(); }
-
+		
 		public synchronized V next() {
 			try {
 				if (scanning) return iterator.next();
@@ -200,5 +192,56 @@ public class Table<T extends Comparable<T>, V extends Indexable<T>> {
 			}
 		}
 		
+		public synchronized void close() {
+			if (scanning) {
+				scanning = false;
+				iterator = null;
+				table.lock.readLock().unlock();
+			}
+		}
+	}
+	
+	public static Gson gson() { return Serialization.GSON; }
+	
+	public void toJson(JsonWriter writer, BiFunction<JsonWriter, V, Exception> itemsSerializer) throws Exception {
+		Common.notNull(writer, itemsSerializer);
+		try {
+			lock.readLock().lock();
+			writer.beginObject();
+			Serialization.writeColl(writer, false, this.getAll(), ITEMS, itemsSerializer);
+			writer.endObject();
+		} finally { lock.readLock().unlock(); }
+	}
+	
+	public void toJson(String filename, BiFunction<JsonWriter, V, Exception> itemsSerializer) throws Exception {
+		Common.notNull(filename, itemsSerializer);
+		try (
+			JsonWriter writer = Table.gson().newJsonWriter( new OutputStreamWriter(new FileOutputStream(filename)) )
+		){ this.toJson(writer, itemsSerializer); }
+	}
+	
+	public static <T extends Comparable<T>, V extends Indexable<T>> Table<T, V> fromJson(JsonReader reader,
+			Function<JsonReader, V> itemsDeserializer) throws IOException, DeserializationException {
+		Common.notNull(reader);
+		Table<T, V> table = new Table<>();
+		reader.beginObject();		
+		
+		String name = reader.nextName();
+		if (!name.equals(ITEMS)) throw new DeserializationException(DeserializationException.JSONREAD);
+		
+		reader.beginArray();
+		while (reader.hasNext()) table.add(itemsDeserializer.apply(reader));
+		reader.endArray();
+		
+		reader.endObject();
+		return table;
+	}
+	
+	public static <T extends Comparable<T>, V extends Indexable<T>> Table<T, V> fromJson(String filename,
+		Function<JsonReader, V> itemsDeserializer) throws IOException, DeserializationException {
+		JsonReader reader = Table.gson().newJsonReader( new InputStreamReader(new FileInputStream(filename)) );
+		Table<T,V> table = Table.fromJson(reader, itemsDeserializer);
+		reader.close();
+		return table;
 	}
 }

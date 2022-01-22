@@ -2,7 +2,9 @@ package winsome.server;
 
 import java.nio.channels.*;
 import java.util.*;
-import java.util.function.BiConsumer;
+import java.util.function.*;
+
+import com.google.gson.stream.*;
 
 import winsome.common.msg.*;
 import winsome.util.*;
@@ -20,18 +22,14 @@ final class Worker implements Runnable {
 	private final SocketChannel client;
 	private Message msg;
 	private MessageBuffer buf;
-	private BiConsumer<SelectionKey, Exception> excHandler;
 	
-	public Worker(SelectionKey skey, BiConsumer<SelectionKey, Exception> excHandler) {
-		Common.notNull(skey, excHandler);
+	public Worker(SelectionKey skey) {
+		Common.notNull(skey);
 		this.skey = skey;
 		this.client = (SocketChannel)this.skey.channel();
 		this.msg = null;
 		this.buf = null;
-		this.excHandler = excHandler;
 	}
-	
-	public Worker(SelectionKey skey) { this(skey, WinsomeServer.DFLEXCHANDLER); }
 	
 	public void run() {
 		WinsomeServer server = WinsomeServer.getServer();
@@ -92,8 +90,23 @@ final class Worker implements Runnable {
 			server.selector().wakeup();
 		} catch (InterruptedException ie) {
 			msg = Message.newError(ServerUtils.INTERROR);
-		} catch (Exception ex) { excHandler.accept(skey, ex); }
+		} catch (RuntimeException rtex) {
+			server.logger().logException(rtex);
+			Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
+			server.signalIllegalState(rtex);
+		} catch (Exception ex) {
+			server.closeConnection(skey);
+			server.logger().logException(ex);
+		}
 	}
 	
-	public String toString() { return Common.jsonString(this); }
+	public String toString() {
+		BiFunction<JsonWriter, Worker, Exception> encoder = 
+			(wr, t) -> {
+				try { WinsomeServer.gson().toJson(t, t.getClass(), wr); return null; }
+				catch (Exception ex) { return ex; }
+			};
+		return Common.toString(this, WinsomeServer.gson(), encoder);
+	}
+	
 }

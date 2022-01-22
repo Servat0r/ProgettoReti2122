@@ -24,7 +24,7 @@ public final class WinsomeClientMain {
 			System.out.println(INTRO);
 			exitCode = client.mainloop();
 		} catch (Exception ex) {
-			if (client != null) client.logger().logStackTrace(ex);
+			if (client != null) client.logger().logException(ex);
 			else ex.printStackTrace();
 			exitCode = -1;
 		} finally {

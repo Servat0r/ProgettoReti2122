@@ -3,7 +3,8 @@ package winsome.server;
 import java.util.*;
 import java.util.function.*;
 
-import winsome.server.action.*;
+import winsome.server.data.*;
+import winsome.util.*;
 
 /**
  * Winsome reward calculator template.
@@ -16,12 +17,12 @@ import winsome.server.action.*;
  */
 public interface RewardCalculator<V,C> {
 	
-	public ToDoubleFunction< Map<String, V> > getVoteStrategy();
-	public ToDoubleFunction< Map<String, C> > getCommentStrategy();
+	public ToDoubleFunction<V> getVoteStrategy();
+	public ToDoubleFunction<C> getCommentStrategy();
 	
 	public double getRewAuth();
 	public double getRewCurs();
 	
-	public double postReward(double iteration, List<Action> actions);
-	public Map<String, Double> computeReward(List<Action> actions);
+	public double postReward(Post post, Map< Long, Pair<String, Set<String>> > authsCurs, long timeout);
+	public Map<String, Double> computeReward(Table<Long, Post> posts, long timeout);
 }

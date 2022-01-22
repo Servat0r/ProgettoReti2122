@@ -16,8 +16,8 @@ public final class Command {
 	
 	public static final String EMPTY = "";
 	public static final Command
-		SKIP = new Command(EMPTY, "skip", Common.toList()), /* A command representing a blank line */
-		NULL = new Command(EMPTY, "null", Common.toList()); /* A command representing no match found */
+		SKIP = new Command(EMPTY, "skip", CollectionsUtils.toList()), /* A command representing a blank line */
+		NULL = new Command(EMPTY, "null", CollectionsUtils.toList()); /* A command representing no match found */
 	
 	private final String id;
 	private final String param;

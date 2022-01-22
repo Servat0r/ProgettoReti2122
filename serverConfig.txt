@@ -33,7 +33,7 @@ POSTJSON	=	posts.json
 WALLETJSON	=	wallets.json
 
 # Periodo di calcolo ricompense
-RWPERIOD	=	30
+RWPERIOD	=	10
 
 # TimeUnit per il periodo di calcolo ricompense
 RWPERIODUNIT	=	SECONDS

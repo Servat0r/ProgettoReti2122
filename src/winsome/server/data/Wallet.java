@@ -1,10 +1,10 @@
 package winsome.server.data;
 
-import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.locks.*;
 
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.*;
+import com.google.gson.*;
 
 import winsome.annotations.NotNull;
 import winsome.util.*;
@@ -17,38 +17,66 @@ public final class Wallet implements Indexable<String> {
 	
 	private static final String TRANSMARK = "#", SEPAR = " : ";	
 	
-	public static final Type TYPE = new TypeToken<Wallet>() {}.getType();
+	public static final Gson gson() { return Serialization.GSON; }
+	
+	@NotNull
+	private static final String timeConv(long time) {
+		Calendar c = Calendar.getInstance();
+		c.setTime(new Date(time));
+		return Common.encodeDate(c);		
+	}
+		
+	public static final Exception jsonSerializer(JsonWriter writer, Wallet wallet) {			
+		try {
+			writer.beginObject();
+			Serialization.writeFields(gson(), writer, false, wallet, "owner", "round", "value");				
+			
+			Serialization.writeMap( writer, false, wallet.history, "history", Wallet::timeConv,
+				(wr, d) -> { try { wr.value(d); return null; } catch (Exception ex) { return ex; } }
+			);
+			
+			writer.endObject();
+			return null;
+		} catch (Exception ex) { return ex; }
+	}
+	
+	public static final Wallet jsonDeserializer (JsonReader reader) {
+		try {
+			Wallet wallet = new Wallet("");
+			
+			reader.beginObject();				
+			Serialization.readFields(gson(), reader, wallet, "owner", "round", "value");
+			
+			Serialization.readMap(reader, wallet.history, "history", str -> Common.decodeDate(str).getTimeInMillis(),
+				rd -> gson().fromJson(rd, Double.class));
+			
+			reader.endObject();
+			return wallet;
+		} catch (Exception ex) { ex.printStackTrace(); return null; }
+	}
 	
 	@NotNull
 	private String owner;
+	private int round = 4;
 	private double value;
 	@NotNull
 	private NavigableMap<Long, Double> history;
 	private transient ReentrantReadWriteLock lock;
-	
-	/**
-	 * Restores transient fields after deserialization from JSON.
-	 * @throws DeserializationException On failure.
-	 */
-	public synchronized void deserialize() throws DeserializationException {
-		if (lock == null) lock = new ReentrantReadWriteLock();
-	}
-	
-	/**
-	 * @return True if transient fields are not restored after deserialization from JSON.
-	 */
-	public synchronized boolean isDeserialized() { return (lock != null); }
-	
+		
 	/**
 	 * @param owner Username of the owner of the wallet.
 	 */
-	public Wallet(String owner) {
+	public Wallet(String owner, int round) {
 		Common.notNull(owner);
+		Common.allAndArgs(round > 0);
 		this.owner = new String(owner);
 		this.value = 0.0;
+		this.round = round;
 		this.history = new TreeMap<>();
 		this.lock = new ReentrantReadWriteLock();
 	}
+	
+	public Wallet(String owner) { this(owner, 10); }
 	
 	public String key() { return owner; }
 	
@@ -85,8 +113,9 @@ public final class Wallet implements Indexable<String> {
 		Common.allAndArgs(time > 0, value >= 0.0);
 		try {
 			lock.writeLock().lock();
+			value = Common.round(value, this.round);
 			boolean result = (this.history.putIfAbsent(time, value) == null);
-			if (result) this.value += value;
+			if (result) this.value = Common.round(this.value + value, this.round);
 			return result;
 		} finally { lock.writeLock().unlock(); }
 	}
@@ -105,11 +134,6 @@ public final class Wallet implements Indexable<String> {
 	
 	@NotNull
 	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.getClass().getSimpleName() + " [");
-		try {
-			if (lock != null) lock.readLock().lock();
-			return String.format("%s : %s", this.getClass().getSimpleName(), Serialization.GSON.toJson(this));
-		} finally { if (lock != null) lock.readLock().unlock(); }
+		return Common.toString(this, gson(), Wallet::jsonSerializer, lock.readLock());
 	}
 }

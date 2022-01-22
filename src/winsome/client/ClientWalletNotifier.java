@@ -62,12 +62,12 @@ final class ClientWalletNotifier extends Thread implements Closeable {
 				DatagramPacket packet = new DatagramPacket(this.buffer, this.buffer.length);
 				this.socket.receive(packet);
 				try { this.notifies.put( new String(packet.getData()) ); }
-				catch (InterruptedException ie) { client.logger().logStackTrace(ie); return; }
+				catch (InterruptedException ie) { client.logger().logException(ie); return; }
 			}
 		} catch (IOException e) {
 			if (grouped) {
 				try { if (!socket.isClosed()) socket.leaveGroup(addr, net); }
-				catch (IOException e1) { client.logger().logStackTrace(e1); }
+				catch (IOException e1) { client.logger().logException(e1); }
 				finally { client.logger().log(prefix + "Wallet notifying service ended"); }
 			} else {
 				String msg = new String(mcastIP.getAddress());

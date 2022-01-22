@@ -1,23 +1,46 @@
 package winsome.server.data;
 
 import winsome.annotations.NotNull;
-import winsome.util.Common;
+import winsome.util.*;
 
-import java.lang.reflect.Type;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.*;
+import com.google.gson.stream.*;
 
 /**
  * Comments in Winsome.
  * @author Salvatore Correnti
  */
 public final class Comment implements Comparable<Comment> {
-	
-	public static final Type TYPE = new TypeToken<Comment>() {}.getType();
-	
+		
 	@NotNull
 	private final String idAuthor, content;
-	@NotNull
 	private final long idPost, time;
+	
+	public static final Gson gson() { return Serialization.GSON; }
+	
+	public static final Exception jsonSerializer(JsonWriter writer, Comment comm) {
+		Common.notNull(writer, comm);
+		String indent = Serialization.getWriterIndent(writer);
+		try {
+			writer.beginObject();
+			Serialization.writeFields(gson(), writer, true, comm, "time", "content");
+			writer.setIndent("");
+			writer.endObject();
+			writer.setIndent(indent);
+			return null;
+		} catch(Exception ex) { return ex; }
+	}
+	
+	public static final Comment deserialize(JsonReader reader, long idPost, String idAuthor) {
+		Common.notNull(reader, idAuthor); Common.allAndArgs(idPost > 0);
+		Comment comm = new Comment(idAuthor, idPost, "stub");
+		try {
+			reader.beginObject();
+			Serialization.readFields(gson(), reader, comm, "time", "content");
+			reader.endObject();
+			return comm;
+		} catch (Exception ex) { ex.printStackTrace(); return null; }
+	}
 	
 	/**
 	 * Creates a new comment.
@@ -55,5 +78,9 @@ public final class Comment implements Comparable<Comment> {
 	public String getContent() { return content; }
 	public long getTime() { return time; }
 	
-	public String toString() { return Common.jsonString(this); }
+	@NotNull
+	public String toString() {
+		String cname = this.getClass().getSimpleName();
+		return String.format( "%s: %s", cname, Common.jsonString(this) );
+	}
 }

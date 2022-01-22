@@ -2,8 +2,8 @@ package winsome.server;
 
 import java.util.*;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicLong;
 
-import winsome.util.IDGen;
 
 /**
  * Custom implementation of thread factory for {@link WinsomeServer} workers pool.
@@ -13,14 +13,14 @@ import winsome.util.IDGen;
  */
 final class ThreadFactoryImpl implements ThreadFactory {
 
-	private final IDGen gen = new IDGen(1);
+	private final AtomicLong gen = new AtomicLong(1);
 	private final List<Thread> workers = new ArrayList<>();
 	
 	public ThreadFactoryImpl() { }
 	
 	public synchronized Thread newThread(Runnable r) {
 		Thread t = new Thread(r);
-		t.setName("Worker #" + gen.nextId());
+		t.setName("Worker #" + gen.getAndIncrement());
 		workers.add(t);
 		return t;
 	}

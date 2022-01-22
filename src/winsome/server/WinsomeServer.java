@@ -2,15 +2,14 @@ package winsome.server;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.*;
 
 import com.google.gson.*;
 import com.google.gson.stream.*;
-import com.google.gson.reflect.TypeToken;
 
 import java.io.*;
-import java.lang.reflect.*;
 import java.net.*;
 import java.nio.channels.*;
 import java.rmi.AlreadyBoundException;
@@ -21,7 +20,6 @@ import winsome.annotations.NotNull;
 import winsome.common.config.ConfigUtils;
 import winsome.common.msg.*;
 import winsome.common.rmi.*;
-import winsome.server.action.*;
 import winsome.server.data.*;
 import winsome.util.*;
 
@@ -53,6 +51,56 @@ public final class WinsomeServer implements AutoCloseable {
 		DFLREWAUTH = 70.0,
 		DFLREWCURS = 30.0;
 	
+	public static final Gson gson() { return Serialization.GSON; }
+	
+	public static final Exception jsonSerializer(JsonWriter writer, WinsomeServer server) {
+		Common.notNull(writer, server);
+		BiFunction<JsonWriter, NavigableSet<String>, Exception> encoder = 
+		(wr, set) -> {
+			try {
+				wr.beginArray();
+				for (String str : set) wr.value(str);
+				wr.endArray();
+				return null;
+			} catch (Exception ex) { return ex; }
+		};		
+		
+		try {			
+			writer.beginObject();
+			Serialization.writeMap(writer, false, server.tagsMap, "tagsMap", s -> s, encoder);
+			Serialization.writeFields(gson(), writer, false, server, "postGen", "illegalState");
+			writer.endObject();
+			return null;
+		} catch (Exception ex) { return ex; }
+	}
+	
+	public static final WinsomeServer jsonDeserializer(JsonReader reader) {
+		Common.notNull(reader);
+		WinsomeServer server;
+		if (WinsomeServer.server == null) server = new WinsomeServer();
+		else server = WinsomeServer.server;
+		Function<JsonReader, NavigableSet<String>> decoder = 
+		rd -> {
+			try {
+				NavigableSet<String> set = new TreeSet<>();
+				rd.beginArray();
+				while (rd.hasNext()) set.add(rd.nextString());
+				rd.endArray();
+				return set;
+			} catch (Exception ex) { ex.printStackTrace(); return null; }
+		};
+		
+		try {
+			reader.beginObject();
+			Serialization.readMap(reader, server.tagsMap, "tagsMap", s->s, decoder);
+			Serialization.readFields(gson(), reader, server, "postGen", "illegalState");
+			reader.endObject();
+			Post.setGen(server.postGen);
+			WinsomeServer.server = server;
+			return server;
+		} catch (Exception ex) { ex.printStackTrace(); return null; }
+	}
+	
 	public static final String
 		DFLSERVERHOST = "127.0.0.1",
 		DFLMCASTADDR = "239.255.32.32";
@@ -63,35 +111,18 @@ public final class WinsomeServer implements AutoCloseable {
 		DFLREGPORT = 7777;
 	
 	private static final String
-		LOGSTR = "SERVER @ %s: { %s : %s }",
-		ERRLOGSTR = "SERVER @ %s : ERROR @ %s : %s",
+		LOGHEAD = "SERVER",
+		LOGSTART = "{ ",
+		LOGEND = " }",
+		LOGSEPAR = ": ",		
+		ERRSEPAR1 = ": ERROR ",
 		EMPTY = "";
 	
 	/* Static locks for a singleton instance */
 	private static final ReentrantLock
 		ILLSTATELOCK = new ReentrantLock(),
 		SERVERLOCK = new ReentrantLock();
-	
-	/* Default Exception handler for workers. */
-	static final BiConsumer<SelectionKey, Exception> DFLEXCHANDLER = (key, ex) -> {
-		Class<?> exClass = ex.getClass();
-		WinsomeServer server = WinsomeServer.getServer();
-		boolean logst = false;
-		if (server == null) return;
-		else if ( exClass.equals(IllegalArgumentException.class) ) { }
-		else if (exClass.equals(IllegalStateException.class)) {
-			Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
-			server.signalIllegalState(ex);
-			logst = true;
-		} else {
-			server.closeConnection(key);
-			if (exClass.equals(NullPointerException.class)) logst = true;
-		}
-		if (logst) server.logger().logStackTrace(ex);
-		else server.logger().log("Exception caught: %s: %s", exClass.getSimpleName(), ex.getMessage());
-	};
-	
-	public static final Type TYPE = new TypeToken<WinsomeServer>() {}.getType();
+		
 	
 	/* Default jsons filenames */
 	public static final String
@@ -147,7 +178,6 @@ public final class WinsomeServer implements AutoCloseable {
 	private long rewPeriod;
 	private double rwAuthPerc, rwCurPerc;
 	private TimeUnit rewUnit;
-	private transient ActionRegistry actReg;
 	private transient RewardManager rewManager;
 	
 	/* Conversione in bitcoin */
@@ -163,134 +193,24 @@ public final class WinsomeServer implements AutoCloseable {
 	private int regPort;
 	private transient ServerRMIImpl svHandler;
 	/* Id generator for the posts (restored after loading) */
-	private IDGen postGen;
+	private AtomicLong postGen;
 	
 	/** Maintains an indication of whether or not the system had come to an illegal state */
 	@NotNull
 	private Pair<String, String> illegalState;
-	
-	private List<Action> oldActions;
-	
-	/**
-	 * Initializes a table by reading the given file and casting to the given type.
-	 * @param <T> Type of keys.
-	 * @param <V> Type of values.
-	 * @param filename Filename of the serialized data.
-	 * @param type Type of the resulting table.
-	 * @return A Table object deserialized on success, null on failure. NOTE: The elements
-	 *  of the table are NOT deserialized (i.e. their transient fields must be initialized).
-	 * @throws IOException On I/O errors.
-	 * @throws DeserializationException On table deserialization failure.
-	 */
-	private static <T extends Comparable<T>,V extends Indexable<T>> Table<T, V> initTable(String filename, Type type)
-		throws IOException, DeserializationException {
-		Table<T, V> table = null;
-		JsonReader reader = Serialization.fileReader(filename);
-		if (reader != null) {
-			try { table = Serialization.GSON.fromJson(reader, type); }
-			catch (JsonIOException | JsonSyntaxException ex) { ex.printStackTrace(); table = null; }
-			finally { reader.close(); }
-		}
-		if (table != null) table.deserialize();
+		
+	@NotNull
+	private static <T extends Comparable<T>, V extends Indexable<T>> Table<T, V> initTable(String jsonFile,
+		Function<JsonReader, V> deserializer){
+		Table<T, V> table;
+		try { table = Table.fromJson(jsonFile, deserializer); }
+		catch (IOException | DeserializationException ex) { table = new Table<>(); }
 		return table;
 	}
-	
-	/**
-	 * Initializes JSON filenames for initializing transient fields.
-	 * @param serverJson JSON file for server.
-	 * @param userJson JSON file for users table.
-	 * @param postJson JSON file for posts table.
-	 * @param walletJson JSON file for wallets table.
-	 * @param users Users table.
-	 * @param posts Posts table.
-	 * @param wallets Wallets table.
-	 * @throws IOException On I/O errors.
-	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
-	 * @throws DeserializationException On failure when initializing transient fields of tables data.
-	 */
-	private void transientsInit(Map<String, String> configMap, String serverJson, String userJson, String postJson, String walletJson, Table<String, User> users,
-		Table<Long, Post> posts, Table<String, Wallet> wallets)
-			throws IOException, AlreadyBoundException, DeserializationException {		
-		this.serverJson = serverJson;
-		this.userJson = userJson;
-		this.postJson = postJson;
-		this.walletJson = walletJson;
-		this.transientsInit(configMap, users, posts, wallets);
-	}
-	
-	/**
-	 * Initializes server transient fields.
-	 * @param users Users table.
-	 * @param posts Posts table.
-	 * @param wallets Wallets table.
-	 * @throws IOException On I/O errors.
-	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
-	 * @throws DeserializationException On failure when initializing transient fields of tables data.
-	 */
-	private void transientsInit(Map<String, String> configMap, Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
-			throws IOException, AlreadyBoundException, DeserializationException {
-		if (postGen == null) this.postGen = new IDGen(1);
-		Post.setGen(postGen);
-		Map<Long, Double> iterationMap = new HashMap<>();
-		this.bitcoinService = new BitcoinService();
-		this.users = ( users != null ? users : new Table<String, User>() );
-		this.posts = (posts != null ? posts : new Table<Long, Post>() );
-		this.wallets = (wallets != null ? wallets : new Table<String, Wallet>() );
-		for (Wallet w : this.wallets.getAll()) { w.deserialize(); }
-		for (Post p : this.posts.getAll()) {
-			p.deserialize();
-			iterationMap.putIfAbsent(p.key(), p.getIteration());
-		}
-		for (User u : this.users.getAll()) { u.deserialize(this.users, this.posts, this.wallets); }
-		
-		this.configFieldsInit(configMap);
-		PrintStream logStream = (logName != EMPTY ? new PrintStream(logName) : System.out);
-		this.logger = new Logger(LOGSTR, ERRLOGSTR, logStream);
-		this.tcpSockAddr = new InetSocketAddress(InetAddress.getByName(serverHost), tcpPort);
-		this.loggedMap = new ConcurrentHashMap<>();
-		this.unlogged = new HashSet<>();
-		this.tcpListener = ServerSocketChannel.open();
-		this.tcpListener.bind(this.tcpSockAddr);
-		this.tcpListener.socket().setSoTimeout(tcpTimeout);
-		this.tcpListener.configureBlocking(false);
-		this.selector = Selector.open();
-		this.workersFactory = new ThreadFactoryImpl();
-		this.workers = new ThreadPoolExecutor(
-			this.corePoolSize,
-			this.maxPoolSize,
-			this.keepAliveTime,
-			WinsomeServer.DFLKEEPALIVEUNIT,
-			new LinkedBlockingQueue<Runnable>(),
-			this.workersFactory,
-			new ThreadPoolExecutor.AbortPolicy()
-		);
-		this.actReg = new ActionRegistry( new Pair<>(rewPeriod, rewUnit) );
-		this.actReg.putOldActions(oldActions);
-		this.oldActions.clear();
-		this.rewManager = new RewardManager(
-			this,
-			this.mcastAddr,
-			this.udpPort,
-			this.mcastPort,
-			this.wallets,
-			this.actReg,
-			this.rwAuthPerc,
-			this.rwCurPerc,
-			iterationMap
-		);
-		this.rewManager.setName(REWMANAGERNAME);
-		this.rewManager.setDaemon(true);
-		this.svHandler = new ServerRMIImpl(this);
-		this.rmiReg = LocateRegistry.createRegistry(regPort);
-		this.rmiReg.bind(ServerRMI.REGSERVNAME, this.svHandler);
-		
-		this.state = State.INIT;
-	}
-	
+
 	/**
 	 * Initializes non-transient fields of the server: this constructor is called by {@link #createServer(Map)}
 	 *  when there is no JSON data from which to initialize server.
-	 * @param configMap Configuration map.
 	 * @param users Users table.
 	 * @param posts Posts table.
 	 * @param wallets Wallets table.
@@ -298,20 +218,14 @@ public final class WinsomeServer implements AutoCloseable {
 	 * @throws AlreadyBoundException By {@link #transientsInit(Table, Table, Table)}.
 	 * @throws DeserializationException By {@link #transientsInit(Table, Table, Table)}.
 	 */
-	private WinsomeServer(Map<String, String> configMap, Table<String, User> users, Table<Long, Post> posts,
-		Table<String, Wallet> wallets) throws IOException, AlreadyBoundException, DeserializationException {
-		Common.notNull(configMap);		
+	private WinsomeServer() {
 		tagsMap = new ConcurrentHashMap<>();
-		oldActions = new ArrayList<Action>();
+		postGen = new AtomicLong(1);
 		illegalState = WinsomeServer.ILLSTATE_OK;
-		this.transientsInit(configMap, users, posts, wallets);
 	}
-	
-	
+
 	private void configFieldsInit(Map<String, String> configMap) {
-		Common.notNull(configMap);
-		
-		
+		Common.notNull(configMap);		
 		Integer tmp;			
 		
 		Function<String, String> newStr = ConfigUtils.newStr;
@@ -319,14 +233,9 @@ public final class WinsomeServer implements AutoCloseable {
 		Function<String, Long> newLong = ConfigUtils.newLong;
 		Function<String, Double> newDouble = ConfigUtils.newDouble;
 		Function<String, TimeUnit> newTimeUnit = ConfigUtils.newTimeUnit;
-
+		
 		logName = ConfigUtils.setValueOrDefault(configMap, "logger", newStr, (logName == null ? EMPTY : logName));
-		
-		serverJson = ConfigUtils.setValueOrDefault(configMap, "serverjson", newStr, DFLSERVERJSON);
-		userJson = ConfigUtils.setValueOrDefault(configMap, "userjson", newStr, DFLUSERJSON);
-		postJson = ConfigUtils.setValueOrDefault(configMap, "postjson", newStr, DFLPOSTJSON);
-		walletJson = ConfigUtils.setValueOrDefault(configMap, "walletjson", newStr, DFLWALLETJSON);
-		
+				
 		serverHost = ConfigUtils.setValueOrDefault(configMap, "server", newStr, DFLSERVERHOST);
 		tcpPort = ConfigUtils.setValueOrDefault(configMap, "tcpport", newInt, DFLTCPPORT);
 		udpPort = ConfigUtils.setValueOrDefault(configMap, "udpport", newInt, 0);
@@ -352,6 +261,61 @@ public final class WinsomeServer implements AutoCloseable {
 		rwCurPerc = ConfigUtils.setValueOrDefault(configMap, "rwcurperc", newDouble, DFLREWCURS);
 		rewUnit = ConfigUtils.setValueOrDefault(configMap, "rwperiodunit", newTimeUnit, TimeUnit.SECONDS);
 	}
+
+	/**
+	 * Initializes server transient fields.
+	 * @param users Users table.
+	 * @param posts Posts table.
+	 * @param wallets Wallets table.
+	 * @throws IOException On I/O errors.
+	 * @throws AlreadyBoundException By {@link Registry#bind(String, Remote)}.
+	 * @throws DeserializationException On failure when initializing transient fields of tables data.
+	 */
+	private void transientsInit(Map<String, String> configMap) throws IOException, AlreadyBoundException,
+			DeserializationException {
+		this.configFieldsInit(configMap);
+		this.bitcoinService = new BitcoinService();
+		PrintStream logStream = (logName != EMPTY ? new PrintStream(logName) : System.out);
+		this.logger = new Logger(LOGHEAD, LOGHEAD, LOGSTART, LOGEND, LOGSEPAR, LOGSEPAR,
+			ERRSEPAR1, LOGSEPAR, logStream);
+		this.tcpSockAddr = new InetSocketAddress(InetAddress.getByName(serverHost), tcpPort);
+		this.loggedMap = new ConcurrentHashMap<>();
+		this.unlogged = new HashSet<>();
+		this.tcpListener = ServerSocketChannel.open();
+		this.tcpListener.bind(this.tcpSockAddr);
+		this.tcpListener.socket().setSoTimeout(tcpTimeout);
+		this.tcpListener.configureBlocking(false);
+		this.selector = Selector.open();
+		this.workersFactory = new ThreadFactoryImpl();
+		this.workers = new ThreadPoolExecutor(
+			this.corePoolSize,
+			this.maxPoolSize,
+			this.keepAliveTime,
+			WinsomeServer.DFLKEEPALIVEUNIT,
+			new LinkedBlockingQueue<Runnable>(),
+			this.workersFactory,
+			new ThreadPoolExecutor.AbortPolicy()
+		);
+		this.rewManager = new RewardManager(
+			this,
+			this.mcastAddr,
+			this.udpPort,
+			this.mcastPort,
+			this.wallets,
+			this.posts,
+			new Pair<>(rewPeriod, rewUnit),
+			this.rwAuthPerc,
+			this.rwCurPerc
+		);
+		this.rewManager.setName(REWMANAGERNAME);
+		this.rewManager.setDaemon(true);
+		this.svHandler = new ServerRMIImpl(this);
+		this.rmiReg = LocateRegistry.createRegistry(regPort);
+		this.rmiReg.bind(ServerRMI.REGSERVNAME, this.svHandler);
+		
+		this.state = State.INIT;
+	}
+	
 	
 	/**
 	 * Creates the single-instance server.
@@ -359,47 +323,54 @@ public final class WinsomeServer implements AutoCloseable {
 	 * @return true on success, false on error.
 	 * @throws Exception
 	 */
-	public static boolean createServer(Map<String, String> configMap) throws Exception {
-		Common.notNull(configMap);
+	public static WinsomeServer createServer(Map<String, String> configMap) throws Exception {
 		try {
 			WinsomeServer.SERVERLOCK.lock();
-			if (WinsomeServer.server != null) return false;
-			String
-				serverJson = ConfigUtils.setValueOrDefault(configMap, "serverjson", ConfigUtils.newStr, DFLSERVERJSON),
-				userJson = ConfigUtils.setValueOrDefault(configMap, "userjson", ConfigUtils.newStr, DFLUSERJSON),
-				postJson = ConfigUtils.setValueOrDefault(configMap, "postjson", ConfigUtils.newStr, DFLPOSTJSON),
-				walletJson = ConfigUtils.setValueOrDefault(configMap, "walletjson", ConfigUtils.newStr, DFLWALLETJSON);
+			if (WinsomeServer.server != null) return WinsomeServer.server;
+			else if (configMap == null) configMap = new HashMap<>();
+			WinsomeServer.server = new WinsomeServer();
+			WinsomeServer server = WinsomeServer.server;
 			
+			server.serverJson = ConfigUtils.setValueOrDefault(configMap, "serverjson", ConfigUtils.newStr, DFLSERVERJSON);
+			server.userJson = ConfigUtils.setValueOrDefault(configMap, "userjson", ConfigUtils.newStr, DFLUSERJSON);
+			server.postJson = ConfigUtils.setValueOrDefault(configMap, "postjson", ConfigUtils.newStr, DFLPOSTJSON);
+			server.walletJson = ConfigUtils.setValueOrDefault(configMap, "walletjson", ConfigUtils.newStr, DFLWALLETJSON);
 			
-			Table<String, Wallet> wallets = initTable(walletJson, ServerUtils.WALLETSTYPE);
-			Table<Long, Post> posts = initTable(postJson, ServerUtils.POSTSTYPE);
-			Table<String, User> users = initTable(userJson, ServerUtils.USERSTYPE);
+			server.wallets = initTable(server.walletJson, Wallet::jsonDeserializer);
+			server.posts = initTable(server.postJson, Post::jsonDeserializer);
+			server.users = initTable(server.userJson, User::jsonDeserializer);
 			
-			JsonReader serverReader = Serialization.fileReader(serverJson);
-			WinsomeServer server = null;
-			if (serverReader != null) {
-				try { server = Serialization.GSON.fromJson(serverReader, WinsomeServer.TYPE); }
-				catch (JsonIOException | JsonSyntaxException ex) { ex.printStackTrace(); server = null; }
-				finally { serverReader.close(); }
+			User.userDeserialization(server.users, server.posts, server.wallets);
+			
+			try ( JsonReader serverReader = Serialization.fileReader(server.serverJson) ){
+				if (serverReader != null) {
+					server = WinsomeServer.jsonDeserializer(serverReader);
+					if (server != null) WinsomeServer.server = server;
+					else throw new IllegalStateException("Server creation");
+				}
 			}
-			if (server != null) {
-				if (!server.illegalState.equals(ILLSTATE_OK)) {
-					String message = String.format("%s : %s", server.illegalState.getKey(), server.illegalState.getValue());
-					throw new IllegalStateException(message);
-				} else server.transientsInit(configMap, serverJson, userJson, postJson, walletJson, users, posts, wallets);
+			
+			if (!server.illegalState.equals(ILLSTATE_OK)) {
+				String message = String.format("%s : %s", server.illegalState.getKey(), server.illegalState.getValue());
+				throw new IllegalStateException(message);
 			}
-			else server = new WinsomeServer(configMap, users, posts, wallets);
-			WinsomeServer.server = server;
-			return true;
+			
+			try { server.transientsInit(configMap); WinsomeServer.server = server; }
+			catch (Exception exc) { WinsomeServer.server = null; server.close(); throw exc; }
+			
+			Post.setGen(server.postGen);
+			return WinsomeServer.server;
 		} finally { WinsomeServer.SERVERLOCK.unlock(); }
 	}
 	
 	/** @return The single instance of the server if any, otherwise null. */
 	public static WinsomeServer getServer() {
-		try { WinsomeServer.SERVERLOCK.lock(); return server; }
-		finally { WinsomeServer.SERVERLOCK.unlock(); }
+		try {
+			WinsomeServer.SERVERLOCK.lock();
+			return WinsomeServer.server;
+		} finally { WinsomeServer.SERVERLOCK.unlock(); }
 	}
-
+	
 	/**
 	 * Server mainloop.
 	 * @return A pair (true, message) on success, a pair (false, message) on success. The message is to be
@@ -518,7 +489,10 @@ public final class WinsomeServer implements AutoCloseable {
 			loggedMap.remove(client);
 			unlogged.remove(client);
 			client.close();
-		} catch (IOException ioe) { throw new IllegalStateException(); }
+		} catch (IOException ioe) {
+			logger.logException(ioe);
+			throw new IllegalStateException();
+		}
 	}
 	
 	/**
@@ -556,7 +530,7 @@ public final class WinsomeServer implements AutoCloseable {
 	Pair<Boolean, String> register(String username, String password, List<String> tags) {
 		User user = User.newUser(username, password, users, posts, wallets, tags);
 		if (user == null) return new Pair<>(false, String.format(ServerUtils.REG_EXISTING, username));
-		if (!users.putIfAbsent(user)) return new Pair<>(false, ServerUtils.INTERROR);
+		if (!users.add(user)) return new Pair<>(false, ServerUtils.INTERROR);
 		NavigableSet<String> set; 
 		for (String t : tags) {
 			String tag = new String(t);
@@ -592,8 +566,13 @@ public final class WinsomeServer implements AutoCloseable {
 					} else throw new IllegalArgumentException(Common.excStr("Unknown channel: '%s'", client.toString()));
 				}
 			}
-			List<String> followers = Serialization.serializeMap(user.getFollowers());
-			return Message.newInfo(mcastAddr, mcastPort, rewManager.mcastMsgLen(), followers, ServerUtils.LOGIN_OK, username);
+			try {
+				List<String> followers = Serialization.serializeMap(user.getFollowers());
+				return Message.newInfo(mcastAddr, mcastPort, rewManager.mcastMsgLen(), followers, ServerUtils.LOGIN_OK, username);
+			} catch (Exception ex) {
+				logger.logException(ex);
+				return Message.newError(ServerUtils.INTERROR);
+			}
 		} else {
 			logger.log("Password checking failed for user '%s'", username);
 			return Message.newError(ServerUtils.LOGIN_PWINV);
@@ -636,8 +615,13 @@ public final class WinsomeServer implements AutoCloseable {
 		SocketChannel client = (SocketChannel)skey.channel();
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
-		List<String> following = Serialization.serializeMap(user.getFollowing());
-		return Message.newUserList(following, ServerUtils.OK);
+		try {
+			List<String> following = Serialization.serializeMap(user.getFollowing());
+			return Message.newUserList(following, ServerUtils.OK);
+		} catch (Exception ex) {
+			logger.logException(ex);
+			return Message.newError(ServerUtils.INTERROR);
+		}
 	}
 	
 	/**
@@ -660,8 +644,13 @@ public final class WinsomeServer implements AutoCloseable {
 		}
 		NavigableSet<User> users = this.users.get(set);
 		for (User u : users) map.put(u.key(), u.tags());
-		result = Serialization.serializeMap(map);
-		return Message.newUserList(result, ServerUtils.OK);
+		try {
+			result = Serialization.serializeMap(map);
+			return Message.newUserList(result, ServerUtils.OK);
+		} catch (Exception ex) {
+			logger.logException(ex);
+			return Message.newError(ServerUtils.INTERROR);
+		}
 	}
 	
 	/**
@@ -688,7 +677,7 @@ public final class WinsomeServer implements AutoCloseable {
 				} else return Message.newOK(ServerUtils.OK);
 				
 			} catch (RemoteException rex) {
-				logger.logStackTrace(rex);
+				logger.logException(rex);
 				return Message.newError(ServerUtils.INTERROR);
 			}
 		} else if (res == 1) return Message.newOK(ServerUtils.FOLLOW_ALREADY, args.get(0));
@@ -716,7 +705,7 @@ public final class WinsomeServer implements AutoCloseable {
 				} else return Message.newOK(ServerUtils.OK);
 				
 			} catch (RemoteException rex) {
-				logger.logStackTrace(rex);
+				logger.logException(rex);
 				return Message.newError(ServerUtils.INTERROR);
 			}
 		} else if (res == 1) return Message.newOK(ServerUtils.UNFOLLOW_ALREADY, args.get(0));
@@ -748,16 +737,11 @@ public final class WinsomeServer implements AutoCloseable {
 		String title = args.get(0), content = args.get(1);
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
-		String author = new String(user.key());
-		Action a = Action.newCreatePost(author);
-		this.actReg.putAction(a);
 		try {
 			long idPost = user.createPost(title, content);
-			a.setIdPost(idPost);
-			this.actReg.endAction(a);
 			return Message.newOK("Post creato correttamente (id = %d)", idPost);
 		} catch (DataException de) {
-			this.actReg.abortAction(a);
+			logger.logException(de);
 			return Message.newError(ServerUtils.INTERROR);
 		}
 	}
@@ -798,7 +782,10 @@ public final class WinsomeServer implements AutoCloseable {
 			String title = posts.remove(0), content = posts.remove(0);
 			String likes = posts.remove(0), dislikes = posts.remove(0);
 			return Message.newPost(title, content, likes, dislikes, posts, Message.OK); }
-		catch (DataException de) { return Message.newError(de.getMessage()); }
+		catch (DataException de) {
+			logger.logException(de);
+			return Message.newError(de.getMessage());
+		}
 	}
 	
 	/**
@@ -816,15 +803,11 @@ public final class WinsomeServer implements AutoCloseable {
 		else idPost = id.longValue();
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
-		String actor = new String(user.key());
-		Action a = Action.newDeletePost(actor, idPost);
 		try {
-			this.actReg.putAction(a);
 			user.deletePost(idPost);
-			this.actReg.endAction(a);
 			return Message.newOK(Message.OK);
 		} catch (DataException de) {
-			this.actReg.abortAction(a);
+			logger.logException(de);
 			String msg = de.getMessage();
 			if (msg.equals(DataException.NOT_AUTHOR)) return Message.newError("%s: %s", ServerUtils.PERMDEN, ServerUtils.POST_NAUTHOR);
 			else return Message.newError(ServerUtils.INTERROR);
@@ -877,24 +860,18 @@ public final class WinsomeServer implements AutoCloseable {
 		String vote = args.get(1);
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
-		String actor = new String(user.key());
 		boolean like;
 		Post p = this.posts.get(idPost);
 		if (p == null) return Message.newError(ServerUtils.POST_NEXISTS, idPost);
 		String author = new String(p.getAuthor());
 		if ( author.equals(user.key()) ) return Message.newError("%s: %s", ServerUtils.PERMDEN, ServerUtils.POST_AUTHOR);
 		
-		try { like = Post.getVote(vote); }
+		try { like = Post.getRate(vote); }
 		catch (DataException de) { return Message.newError(ServerUtils.INV_VOTE_SYNTAX); }
-		Action a = Action.newRatePost(like, actor, author, idPost);		
 		try {
-			this.actReg.putAction(a);
-			if (user.ratePost(idPost, like)) {
-				this.actReg.endAction(a);
-				return Message.newOK(ServerUtils.OK);
-			} else { this.actReg.abortAction(a); return Message.newError(ServerUtils.VOTED_ALREADY); }
+			if (user.ratePost(idPost, like)) return Message.newOK(ServerUtils.OK);
+			else return Message.newError(ServerUtils.VOTED_ALREADY);
 		} catch (DataException de) {
-			this.actReg.abortAction(a);
 			String msg = de.getMessage();
 			if (msg.equals(DataException.NOT_IN_FEED)) return Message.newError(ServerUtils.POST_NINFEED, idPost);
 			else return Message.newError(ServerUtils.INTERROR);
@@ -917,19 +894,12 @@ public final class WinsomeServer implements AutoCloseable {
 		String comment = args.get(1);
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
-		String actor = new String(user.key());
 		Post p = this.posts.get(idPost);
 		if (p == null) return Message.newError(ServerUtils.POST_NEXISTS, idPost);
-		String author = new String(p.getAuthor());
-		Action a = Action.newAddComment(actor, author, idPost);
 		try {
-			this.actReg.putAction(a);
-			int ncomm = user.addComment(idPost, comment);
-			a.setNComments(ncomm);
-			this.actReg.endAction(a);
+			user.addComment(idPost, comment);
 			return Message.newOK(ServerUtils.OK);
 		} catch (DataException de) {
-			this.actReg.abortAction(a);
 			switch (de.getMessage()) {
 				case DataException.NOT_IN_FEED : { return Message.newError(ServerUtils.POST_NINFEED, idPost); }
 				case DataException.SAME_AUTHOR : { return Message.newError("%s : %s", ServerUtils.PERMDEN, ServerUtils.POST_AUTHOR); }
@@ -993,60 +963,41 @@ public final class WinsomeServer implements AutoCloseable {
 	protected final int bufferCap() { return bufferCap; }
 	
 	protected final Selector selector() { return selector; }
-	
-	/**
-	 * Update the iteration fields of the posts still alive.
-	 * @param map Map idPost -> iteration num.
-	 * @return true on success, false otherwise.
-	 */
-	protected final boolean updateIters(Map<Long, Double> map) {
-		Common.notNull(map);
-		Post p;
-		for (long id : map.keySet()) {
-			p = posts.get(id);
-			if (p == null) return false;
-			else p.setIteration(map.get(id));
-		}
-		return true;
-	}
-	
+		
 	protected final Logger logger() { return logger; }
 	
 	/**
 	 * Serializes server data into 4 JSON files: one for the server, one for the users,
 	 *  one for the posts and one for the wallets.
-	 * @throws IllegalStateException If thrown by called methods.
+	 * @throws Exception If thrown by called methods.
 	 */
-	private void serialize() throws IllegalStateException {
-		Gson gson = Serialization.GSON;
+	private void serialize() throws Exception {
 		logger.log("Serializing on (%s, %s, %s, %s)", userJson, postJson, walletJson, serverJson);
 		
-		try (JsonWriter walletsWriter = Serialization.fileWriter(walletJson)){
-			gson.toJson(wallets, ServerUtils.WALLETSTYPE, walletsWriter);
-		} catch (IOException ioe) {
-			logger.logStackTrace(ioe);
+		try { wallets.toJson(walletJson, Wallet::jsonSerializer); }
+		catch (Exception ex) {
+			logger.logException(ex);
 			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", walletJson));
 		}
 		
-		try (JsonWriter postsWriter = Serialization.fileWriter(postJson)){
-			gson.toJson(posts, ServerUtils.POSTSTYPE, postsWriter);
-		} catch (IOException ioe) {
-			logger.logStackTrace(ioe);
+		try { posts.toJson(postJson, Post::jsonSerializer); }
+		catch (Exception ex) {
+			logger.logException(ex);
 			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", postJson));
 		}
 		
-		try (JsonWriter usersWriter = Serialization.fileWriter(userJson)){
-			gson.toJson(users, ServerUtils.USERSTYPE, usersWriter);
-		} catch (IOException ioe) {
-			logger.logStackTrace(ioe);
+		try { users.toJson(userJson, User::jsonSerializer); }
+		catch (Exception ex) {
+			logger.logException(ex);
 			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", userJson));
 		}
 		
 		try (JsonWriter serverWriter = Serialization.fileWriter(serverJson)){
-			gson.toJson(this, WinsomeServer.TYPE, serverWriter);
-		} catch (IOException ioe) {
-			logger.logStackTrace(ioe);
-			throw new IllegalStateException(Common.excStr("Unable to write to '%s'", serverJson));
+			Exception ex = WinsomeServer.jsonSerializer(serverWriter, this);
+			if (ex != null) {
+				logger.logException(ex);
+				throw new IllegalStateException(Common.excStr("Unable to write to '%s'", serverJson));
+			}
 		}
 	}
 		
@@ -1065,7 +1016,7 @@ public final class WinsomeServer implements AutoCloseable {
 			logger.log("TCP Listener closed");
 			
 			try { rmiReg.unbind(ServerRMI.REGSERVNAME); }
-			catch (Exception ex) { logger.logStackTrace(ex); }
+			catch (Exception ex) { logger.logException(ex); }
 			logger.log("RMI Registry closed");
 			
 			workers.shutdown();
@@ -1073,9 +1024,6 @@ public final class WinsomeServer implements AutoCloseable {
 			workersFactory.joinAll();
 			logger.log("Workers pool closed");
 			
-			List<Action> act = new ArrayList<>();
-			actReg.getActions(act);
-			this.oldActions.addAll(act);
 			logger.log("Old actions saved");
 			
 			for (SocketChannel chan : loggedMap.keySet()) chan.close();
@@ -1094,5 +1042,5 @@ public final class WinsomeServer implements AutoCloseable {
 	}
 	
 	@NotNull
-	public String toString() { return Common.jsonString(this); }
+	public String toString() { return Common.toString(this, gson(), WinsomeServer::jsonSerializer); }
 }

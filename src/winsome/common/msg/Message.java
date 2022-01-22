@@ -79,14 +79,14 @@ public final class Message {
 		BTC = "btc",
 		NOTIFY = "notify";
 	
-	public static final List<String> COMMANDS = Common.toList(
+	public static final List<String> COMMANDS = CollectionsUtils.toList(
 		OK, ERR, REG, LOGIN, LOGOUT, LIST, FOLLOW, UNFOLLOW, BLOG, POST, SHOW,
 		DELETE, REWIN, RATE, COMMENT, WALLET, HELP, QUIT, EXIT
 	);
 	
-	private static final List<String> emptyList = Common.toList(EMPTY);
+	private static final List<String> emptyList = CollectionsUtils.toList(EMPTY);
 	
-	public static final Map<String, List<String>> CODES = Common.newHashMapFromLists(
+	public static final Map<String, List<String>> CODES = CollectionsUtils.newHashMapFromCollections(
 		COMMANDS,
 		Arrays.asList(
 			Arrays.asList(EMPTY, INFO, USLIST, PSLIST, POST, WALLET, QUIT, EXIT),
@@ -178,7 +178,7 @@ public final class Message {
 	 */
 	public static Message newOK(String format, Object...objs) {
 		String message = String.format(format, objs);
-		try { return new Message( OK, EMPTY, Common.toList(message) ); } catch (MessageException mex) { return null; }
+		try { return new Message( OK, EMPTY, CollectionsUtils.toList(message) ); } catch (MessageException mex) { return null; }
 	}
 	
 	/**
@@ -190,7 +190,7 @@ public final class Message {
 	 */
 	public static Message newError(String format, Object...objs) {
 		String message = String.format(format, objs);
-		try{ return new Message(ERR, EMPTY, Common.toList(message)); } catch (MessageException mex) { return null; }
+		try{ return new Message(ERR, EMPTY, CollectionsUtils.toList(message)); } catch (MessageException mex) { return null; }
 	}
 
 	/**
@@ -205,7 +205,7 @@ public final class Message {
 	 */
 	public static Message newInfo(String ip, int port, int mcastMsgLen, List<String> users, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
-		List<String> args = Common.toList(users, message, ip, Integer.toString(port), Integer.toString(mcastMsgLen));
+		List<String> args = CollectionsUtils.toList(users, message, ip, Integer.toString(port), Integer.toString(mcastMsgLen));
 		try { return new Message(OK, INFO, args); } catch (MessageException mex) { return null; }
 	}
 	
@@ -220,7 +220,7 @@ public final class Message {
 	 */
 	public static Message newUserList(List<String> items, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
-		List<String> args = Common.toList(items, message);
+		List<String> args = CollectionsUtils.toList(items, message);
 		try { return new Message(OK, USLIST, args); } catch (MessageException mex) { return null; }
 	}
 	
@@ -235,7 +235,7 @@ public final class Message {
 	 */
 	public static Message newPostList(List<String> items, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
-		List<String> args = Common.toList(items, message);
+		List<String> args = CollectionsUtils.toList(items, message);
 		try { return new Message(OK, PSLIST, args); } catch (MessageException mex) { return null; }
 	}
 	
@@ -255,7 +255,7 @@ public final class Message {
 	public static Message newPost(String title, String content, String likes, String dislikes,
 		List<String> comments, String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
-		List<String> args = Common.toList(comments, message, title, content, likes, dislikes);
+		List<String> args = CollectionsUtils.toList(comments, message, title, content, likes, dislikes);
 		try { return new Message(OK, POST, args); } catch (MessageException mex) { return null; }
 	}
 		
@@ -271,7 +271,7 @@ public final class Message {
 	 */
 	public static Message newWallet(double value, List<String> transactions, String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
-		List<String> args = Common.toList(transactions, message, Double.toString(value));
+		List<String> args = CollectionsUtils.toList(transactions, message, Double.toString(value));
 		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
 	}
 	
@@ -289,7 +289,7 @@ public final class Message {
 	public static Message newBtcWallet(double btcValue, double value, List<String> transactions,
 		String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
-		List<String> args = Common.toList(transactions, message, Double.toString(btcValue), Double.toString(value));
+		List<String> args = CollectionsUtils.toList(transactions, message, Double.toString(btcValue), Double.toString(value));
 		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
 	}
 	
@@ -301,7 +301,7 @@ public final class Message {
 	 */
 	public static Message newQuit(String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
-		List<String> args = Common.toList(message);
+		List<String> args = CollectionsUtils.toList(message);
 		try { return new Message(OK, QUIT, args); } catch (MessageException mex) { return null; }		
 	}
 	
@@ -314,7 +314,7 @@ public final class Message {
 	@NotNull
 	public static Message newMessageFromCmd(Command cmd) throws MessageException {
 		Common.notNull(cmd);
-		List<String> args = Common.toList(cmd.getArgs());
+		List<String> args = CollectionsUtils.toList(cmd.getArgs());
 		return new Message(cmd.getId(), cmd.getParam(), args);
 	}
 	

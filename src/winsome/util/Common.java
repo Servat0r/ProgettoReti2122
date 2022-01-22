@@ -1,11 +1,15 @@
 package winsome.util;
 
 import java.io.*;
+import java.lang.reflect.*;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.locks.Lock;
 import java.util.function.*;
 import java.util.regex.*;
+
+import com.google.gson.Gson;
+import com.google.gson.stream.*;
 
 import winsome.annotations.NotNull;
 
@@ -20,13 +24,38 @@ public final class Common {
 	
 	private Common() {}
 	
-	@NotNull
+	public static void printParams(String className, String methodName) throws ClassNotFoundException {
+		List<Method> methods = Arrays.asList(Class.forName(className).getDeclaredMethods());
+		List<String> res = new ArrayList<>();
+		for (Method m : methods) {
+			if (m.getName().equals(methodName)) {
+				Arrays.asList(m.getParameters()).forEach( param -> res.add(param.getName() + ": " + param.getType()) );
+			}
+		}
+		String str = CollectionsUtils.strReduction(res, "\n", "{\n", "\n}", s -> s);
+		System.out.println(str);
+	}
+	
+	public static void printParams(Class<?> cl, String methodName) throws ClassNotFoundException
+		{ printParams(cl.getCanonicalName(), methodName); }
+	
+	public static void genericDesc(Object obj, List<String> objParams, Map<String, Type> fieldParams){
+		Common.notNull(obj, objParams, fieldParams);
+		Class<?> cl = obj.getClass();
+		
+		objParams.add(cl.toGenericString());
+		for (TypeVariable<?> tv : cl.getTypeParameters()) objParams.add(tv.getTypeName());
+		
+		for (Field field : cl.getDeclaredFields()) fieldParams.put(field.getName(), field.getGenericType());
+	}
+	
 	/**
 	 * Factory of regex matching functions.
 	 * @param regex Pattern to match.
 	 * @return A function of the form String -> Integer that tries to match
 	 *  its input string with the regex pattern. 
 	 */
+	@NotNull
 	public static ToIntFunction<String> regexMatcher(String regex){
 		Common.notNull(regex);
 		return (str) -> {
@@ -160,10 +189,27 @@ public final class Common {
 	 * @return A string representation of the given object in the form \<ClassName\>: \<Json form\>.
 	 */
 	public static String jsonString(Object obj) {
-		Common.notNull(obj);
+		if (obj == null) return "null";
 		String cname = obj.getClass().getSimpleName(), jsond = Serialization.GSON.toJson(obj, obj.getClass());
 		return String.format("%s: %s", cname, jsond);
 	}
+	
+	@NotNull
+	public static <T> String toString(T obj, Gson gson, BiFunction<JsonWriter, T, Exception> jsonSerializer, Lock...locks) {
+		if (obj == null) return "null";
+		Common.notNull(jsonSerializer);
+		boolean lock = true;
+		for (int i = 0; i < locks.length; i++) if (locks[i] == null) lock = false; 
+		StringWriter str = new StringWriter();
+		try ( JsonWriter writer = gson.newJsonWriter(str) ){
+			if (lock) for (int i = 0; i < locks.length; i++) locks[i].lock();
+			Exception ex = jsonSerializer.apply(writer, obj);
+			if (ex != null) throw ex;
+			else return String.format("%s: %s", obj.getClass().getSimpleName(), str.toString());
+		} catch (Exception ex) { return Common.jsonString(obj); }
+		finally { if (lock) for (int i = locks.length-1; i >= 0; i--) locks[i].unlock(); }
+	}
+	
 	/* PRINTING */
 	
 	
@@ -194,8 +240,11 @@ public final class Common {
 	 * @throws NullPointerException If any of the items in objs is null.
 	 */
 	public static void notNull(String msg, Object ...objs) throws NullPointerException {
-		for (int i = 0; i < objs.length; i++) if (objs[i] == null)
-			throw new NullPointerException( excStr("arg #%d%s%s", i+1, SEPAR, msg) );
+		for (int i = 0; i < objs.length; i++) {
+			if (objs[i] == null) {
+				throw new NullPointerException( excStr("arg%d%s%s", i, SEPAR, msg) );
+			}
+		}
 	}
 	
 	/**
@@ -254,6 +303,47 @@ public final class Common {
 	/* PARAMS CHECKING */
 	
 	/* BUILDING VALUES / DATA STRUCTURES */
+	
+	public static double round(double d, int c) {
+		String fmt = "%." + c + "f";
+		return Double.parseDouble( String.format(fmt, d).replace(",", ".") );
+	}
+	
+	public static final String encodeDate(Calendar c) {
+		Common.notNull(c);
+		String fmt = "%d/%d/%d %d:%d:%d:%d"; //day/month/year hours:minutes:seconds:milliseconds
+		int
+			year = c.get(Calendar.YEAR),
+			month = c.get(Calendar.MONTH),
+			day = c.get(Calendar.DAY_OF_MONTH),
+			hours = c.get(Calendar.HOUR_OF_DAY),
+			minutes = c.get(Calendar.MINUTE),
+			seconds = c.get(Calendar.SECOND),
+			millis = c.get(Calendar.MILLISECOND);
+		return String.format(fmt, day, month, year, hours, minutes, seconds, millis);
+	}
+	
+	public static final Calendar decodeDate(String str) {
+		Common.notNull(str);
+		String[] dateHour = str.split(" ");
+		Common.allAndArgs(dateHour.length == 2);
+		String[] dateData = dateHour[0].split("/");
+		String[] hourData = dateHour[1].split(":");
+		Common.allAndArgs(dateData.length == 3, hourData.length == 4);
+		int
+			year = Integer.parseInt(dateData[2]),
+			month = Integer.parseInt(dateData[1]),
+			day = Integer.parseInt(dateData[0]),
+			hours = Integer.parseInt(hourData[0]),
+			minutes = Integer.parseInt(hourData[1]),
+			seconds = Integer.parseInt(hourData[2]),
+			millis = Integer.parseInt(hourData[3]);
+		Calendar c = Calendar.getInstance();
+		c.set(year, month, day, hours, minutes, seconds);
+		c.set(Calendar.MILLISECOND, millis);
+		return c;
+	}
+	
 	/**
 	 * Return the sum of the elements of a collection of integers.
 	 * @param coll A Collection of integers.
@@ -262,9 +352,7 @@ public final class Common {
 	 */
 	public static int intSum(Collection<Integer> coll) {
 		Common.collectionNotNull(coll);
-		int s = 0;
-		for (Integer i : coll) s += i;
-		return s;
+		return CollectionsUtils.collAccumulate(coll, (a,b) -> a+b, 0);
 	}
 	
 	/**
@@ -275,9 +363,7 @@ public final class Common {
 	 */
 	public static double doubleSum(Collection<Double> coll) {
 		Common.collectionNotNull(coll);
-		double s = 0.0;
-		for (Double i : coll) s += i;
-		return s;
+		return CollectionsUtils.collAccumulate(coll, (a,b) -> a+b, 0.0);
 	}
 		
 	/**
@@ -288,45 +374,9 @@ public final class Common {
 	 */
 	public static long longSum(Collection<Long> coll) {
 		Common.collectionNotNull(coll);
-		long s = 0;
-		for (Long i : coll) s += i;
-		return s;
+		return CollectionsUtils.collAccumulate(coll, (a,b) -> a+b, 0L);
 	}
-	
-	/**
-	 * Return the maximum of the elements of a collection of integers.
-	 * @param coll A Collection of integers.
-	 * @return The maximum of the element in coll.
-	 * @throws NullPointerException if coll == null or contains a null element.
-	 */
-	public static int max(Collection<Integer> coll) {
-		Common.collectionNotNull(coll);
-		boolean set = false;
-		int result = 0;
-		for (int val : coll) {
-			if (!set) { result = val; set = true; }
-			else result = Math.max(val, result);
-		}
-		return result;
-	}
-	
-	/**
-	 * Return the minimum of the elements of a collection of integers.
-	 * @param coll A Collection of integers.
-	 * @return The minimum of the element in coll.
-	 * @throws NullPointerException if coll == null or contains a null element.
-	 */
-	public static int min(Collection<Integer> coll) {
-		Common.collectionNotNull(coll);
-		boolean set = false;
-		int result = 0;
-		for (int val : coll) {
-			if (!set) { result = val; set = true; }
-			else result = Math.min(val, result);
-		}
-		return result;
-	}
-	
+		
 	/**
 	 * Transforms an integer into a byte array.
 	 * @param num The num to transform.
@@ -431,69 +481,38 @@ public final class Common {
 	public static byte[] readNBytes(InputStream in, int length) throws IOException
 		{ return Common.readNBytes(in, length, true); }
 	
-	/**
-	 * A method similar to {@link Arrays#asList(Object...)} but the returned list is modifiable,
-	 * and with the option to append another list after the elements specified in head.
-	 * @param <T> Type of the resulting list.
-	 * @param tail Sublist to append after the elements of head.
-	 * @param head Elements to convert to a list.
-	 * @return A list made up by the elements in head, followed by tail.
-	 */
-	@SafeVarargs
-	public static <T> List<T> toList(List<T> tail, T... head){
-		List<T> list = new ArrayList<>();
-		for (int i = 0; i < head.length; i++) list.add(head[i]);
-		list.addAll(tail);
-		return list;
+	
+	public static String printFields(Object obj) {
+		Common.notNull(obj);
+		List<Field> fields = Arrays.asList(obj.getClass().getDeclaredFields());
+		fields.forEach(f -> f.setAccessible(true));
+		List<String> datas = new ArrayList<>();
+		
+		CollectionsUtils.remap(fields, datas, f -> {
+			try {
+				String format = "%s : %s : '%s'", internal;
+				if (f.get(obj) == null) internal = "null";
+				else if ( f.get(obj).getClass().isArray() ) {
+					Object[] o = (Object[])f.get(obj);
+					List<Object> l = new ArrayList<>();
+					for (Object item : o) l.add(item);
+					internal = CollectionsUtils.strReduction(l, ", ", "[", "]", Objects::toString);
+				} else internal = Objects.toString(f.get(obj));
+				return String.format(format, f.getName(), f.getType().getSimpleName(), internal);
+			} catch (IllegalArgumentException | IllegalAccessException e) { e.printStackTrace(); return null; }
+		});
+		
+		fields.forEach(f -> f.setAccessible(false));
+		
+		return CollectionsUtils.strReduction(datas, "; ", "{", "}", Objects::toString);
 	}
 	
-	/**
-	 * A method similar to {@link Arrays#asList(Object...)} but the returned list is modifiable.
-	 * @param <T> Type of the resulting list.
-	 * @param head Elements to convert to a list.
-	 * @return A list made up by the elements in head.
-	 */
-	@SafeVarargs
-	public static <T> List<T> toList(T... head){
-		List<T> list = new ArrayList<>();
-		for (int i = 0; i < head.length; i++) list.add(head[i]);
-		return list;
-	}
-	
-	/**
-	 * Creates a new ConcurrentHashMap from a couple of lists of the same length associating for each i = 1,...,length 
-	 *  the i-th element of the first list to the i-th element of the second.
-	 * @param <K> Type of ConcurrentMap keys.
-	 * @param <V> Type of ConcurrentMap values.
-	 * @param keys Keys of the Map.
-	 * @param values Values of the Map.
-	 * @return A ConcurrentHashMap as already described on success.
-	 * @throws IllegalArgumentException If keys.size() != values.size().
-	 */
-	public static <K,V> ConcurrentMap<K, V> newConcurrentHashMapFromLists(List<K> keys, List<V> values){
-		Common.allAndArgs(keys.size() == values.size());
-		int size = keys.size();
-		ConcurrentMap<K,V> map = new ConcurrentHashMap<>();
-		for (int i = 0; i < size; i++) map.put(keys.get(i), values.get(i));
-		return map;
-	}
-	
-	/**
-	 * Creates a new HashMap from a couple of lists of the same length associating for each i = 1,...,length 
-	 *  the i-th element of the first list to the i-th element of the second.
-	 * @param <K> Type of Map keys.
-	 * @param <V> Type of Map values.
-	 * @param keys Keys of the Map.
-	 * @param values Values of the Map.
-	 * @return A HashMap as already described on success.
-	 * @throws IllegalArgumentException If keys.size() != values.size().
-	 */
-	public static <K,V> HashMap<K, V> newHashMapFromLists(List<K> keys, List<V> values){
-		if (keys.size() != values.size()) return null;
-		int size = keys.size();
-		HashMap<K,V> map = new HashMap<>();
-		for (int i = 0; i < size; i++) map.put(keys.get(i), values.get(i));
-		return map;
+	public static String printFieldsNames(Object obj) {
+		Common.notNull(obj);
+		List<Field> fields = Arrays.asList(obj.getClass().getDeclaredFields());
+		List<String> datas = new ArrayList<>();
+		CollectionsUtils.remap( fields, datas, f -> f.getName() + " : " + f.getType().getSimpleName() );		
+		return CollectionsUtils.strReduction(datas, "; ", "{", "}", Objects::toString);
 	}
 	
 	/**

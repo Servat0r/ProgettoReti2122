@@ -3,8 +3,9 @@ package winsome.server.data;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
-import java.lang.reflect.*;
-import com.google.gson.reflect.TypeToken;
+
+import com.google.gson.*;
+import com.google.gson.stream.*;
 
 import winsome.annotations.NotNull;
 import winsome.util.*;
@@ -31,9 +32,78 @@ public final class User implements Indexable<String>, Comparable<User> {
 	 */
 	private static final User max(User u1, User u2) { return (u1.compareTo(u2) <= 0 ? u2 : u1); }
 	
-	public static final Type TYPE = new TypeToken<User>() {}.getType();
+	public static final Gson gson() { return Serialization.GSON; }
 	
-	private transient boolean deserialized = false;
+	public static final Exception jsonSerializer(JsonWriter writer, User user) {
+		try {
+			writer.beginObject();
+			Serialization.writeFields(gson(), writer, false, user, "username", "pwAppend", "hashStr");
+			Serialization.writeColl(writer, true, user.tags, "tags", String.class);
+			Serialization.writeColl(writer, true, user.following().keySet(), "following", String.class);
+			Serialization.writeColl(writer, true, user.followers().keySet(), "followers", String.class);
+			Serialization.writeColl(writer, true, user.blog().keySet(), "blog", Long.class);
+			writer.endObject();
+			return null;
+		} catch (Exception ex) { return ex; }
+	}
+	
+	public static final User jsonDeserializer(JsonReader reader) {
+		try {
+			reader.beginObject();
+			String
+				username = Serialization.readNameObject(reader, "username", String.class),
+				pwAppend = Serialization.readNameObject(reader, "pwAppend", String.class),
+				hashStr = Serialization.readNameObject(reader, "hashStr", String.class);
+			List<String> tags = new ArrayList<>();
+			Serialization.readColl(reader, tags, "tags", String.class);
+			User user = new User(username, pwAppend, hashStr, tags);
+			NavigableSet<String> usernames = new TreeSet<>();
+			
+			Serialization.readColl(reader, usernames, "following", String.class);
+			user.following = new Index<>(null);
+			usernames.forEach(str -> user.following.add(str));
+			usernames.clear();
+			
+			Serialization.readColl(reader, usernames, "followers", String.class);
+			user.followers = new Index<>(null);
+			usernames.forEach(str -> user.followers.add(str));
+			usernames.clear();
+			
+			NavigableSet<Long> longs = new TreeSet<>();
+			Serialization.readColl(reader, longs, "blog", Long.class);
+			user.blog = new Index<>(null);
+			longs.forEach(id -> user.blog.add(id));
+			longs.clear();
+			
+			reader.endObject();
+			return user;
+		} catch (Exception ex) { ex.printStackTrace(); return null; }
+	}
+	
+	//Suppose that users, posts and wallets are already deserialized
+	public synchronized static void userDeserialization(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets) {
+		Common.notNull(users, posts, wallets);
+		NavigableSet<String> keys;
+		NavigableSet<Long> blog;
+		for (User user : users.getAll()) {
+			keys = user.followers.keySet();
+			user.followers = new Index<>(users);
+			keys.forEach(str -> user.followers.add(str));
+			
+			keys = user.following.keySet();
+			user.following = new Index<>(users);
+			keys.forEach(str -> user.following.add(str));
+			
+			blog = user.blog.keySet();
+			user.blog = new Index<>(posts);
+			blog.forEach(str -> user.blog.add(str));
+			
+			user.posts = posts;
+			user.wallet = wallets.get(user.key());
+			
+		}
+	}
+		
 	@NotNull
 	private final String username;
 	private transient Wallet wallet;
@@ -46,9 +116,9 @@ public final class User implements Indexable<String>, Comparable<User> {
 	@NotNull
 	private final List<String> tags;
 	
-	private final Index<String, User> following;
-	private final Index<String, User> followers;
-	private final Index<Long, Post> blog;
+	private Index<String, User> following;
+	private Index<String, User> followers;
+	private Index<Long, Post> blog;
 	
 	/** Reference to the post table of the server. */
 	private transient Table<Long, Post> posts;
@@ -129,6 +199,13 @@ public final class User implements Indexable<String>, Comparable<User> {
 		return user;
 	}
 	
+	private User(String username, String pwAppend, String hashStr, List<String> tags) {
+		this.username = username;
+		this.pwAppend = pwAppend;
+		this.hashStr = hashStr;
+		this.tags = tags;
+	}
+	
 	/**
 	 * @param username Username.
 	 * @param password Password.
@@ -142,7 +219,6 @@ public final class User implements Indexable<String>, Comparable<User> {
 		Common.notNull(username, password, posts, wallets, tags);
 		Common.allAndArgs(username.length() > 0, password.length() > 0, tags.size() >= 1, tags.size() <= 5);
 		
-		this.deserialized = true;
 		this.username = username;
 		
 		Random r = new Random(System.currentTimeMillis());
@@ -153,7 +229,7 @@ public final class User implements Indexable<String>, Comparable<User> {
 		catch (NoSuchAlgorithmException ex) { throw new IllegalStateException(); }
 		
 		this.wallet = new Wallet(username);
-		if (!wallets.putIfAbsent(wallet)) throw new IllegalStateException();
+		if (!wallets.add(wallet)) throw new IllegalStateException();
 		
 		this.tags = tags;
 		this.followers = new Index<>(users);
@@ -161,29 +237,6 @@ public final class User implements Indexable<String>, Comparable<User> {
 		this.blog = new Index<>(posts);
 		this.posts = posts;
 	}
-	
-	/**
-	 * Restores transient fields after deserialization from JSON.
-	 * @param users Table of users for deserialization (usually the one of the server).
-	 * @param posts Table of posts for deserialization (usually the one of the server).
-	 * @param wallets Table of wallets for deserialization (usually the one of the server).
-	 * @throws DeserializationException On failure.
-	 */
-	public synchronized void deserialize(Table<String, User> users, Table<Long, Post> posts, Table<String, Wallet> wallets)
-		throws DeserializationException {
-		Common.notNull(users, posts, wallets);
-		if (this.isDeserialized()) return;
-		if (!users.isDeserialized() || !posts.isDeserialized() || !wallets.isDeserialized())
-			throw new DeserializationException();
-		following.deserialize(users); followers.deserialize(users);
-		if (this.posts == null) this.posts = posts; else this.posts.deserialize();
-		blog.deserialize(this.posts);
-		if (this.wallet == null) this.wallet = wallets.get(username);
-		this.wallet.deserialize();
-		deserialized = true;
-	}
-	
-	public synchronized boolean isDeserialized() { return deserialized; }
 	
 	/**
 	 * Checks if the given password is correct by computing the SHA-256 on the concatenation
@@ -296,13 +349,12 @@ public final class User implements Indexable<String>, Comparable<User> {
 	 * Adds a comment to the post with idPost and the specified content.
 	 * @param idPost Id of the post.
 	 * @param content Content of the post.
-	 * @return The number of comments to the post as specified in {@link Post#addComment(String, String)}.
 	 * @throws DataException If post is not in user's feed.
 	 */
-	public int addComment(long idPost, String content) throws DataException { //comment <idPost> <comment>
+	public void addComment(long idPost, String content) throws DataException { //comment <idPost> <comment>
 		Common.allAndArgs(idPost > 0, content != null);
 		Post p;
-		if ( (p = this.feedSearch(idPost)) != null ) return p.addComment(key(), content);
+		if ( (p = this.feedSearch(idPost)) != null ) p.addComment(key(), content);
 		else throw new DataException(DataException.NOT_IN_FEED);
 	}
 	
@@ -316,7 +368,7 @@ public final class User implements Indexable<String>, Comparable<User> {
 	 */
 	public long createPost(String title, String content) throws DataException { //post <title> <content>
 		Post p = new Post(title, content, this);
-		if (!this.posts.putIfAbsent(p)) return -1;
+		if (!this.posts.add(p)) return -1;
 		if (!this.blog.add(p.key())) {
 			if (this.posts.remove(p.key()) == null) throw new IllegalStateException("Could not remove post");
 			return -1;
@@ -376,7 +428,7 @@ public final class User implements Indexable<String>, Comparable<User> {
 	 */
 	@NotNull
 	public List<String> getWallet() {
-		List<String> result = Common.toList( Double.toString(this.wallet().value()) );
+		List<String> result = CollectionsUtils.toList( Double.toString(this.wallet().value()) );
 		result.addAll(this.wallet().history());
 		return result;
 	}
@@ -391,7 +443,11 @@ public final class User implements Indexable<String>, Comparable<User> {
 		return Objects.equals(key(), other.key());
 	}
 	
-	public String toString() { return String.format("%s : %s", this.getClass().getSimpleName(), Serialization.GSON.toJson(this)); }
+	@NotNull
+	public String toString() {
+		String cname = this.getClass().getSimpleName();
+		return String.format( "%s: %s", cname, Common.toString(this, gson(), User::jsonSerializer) );
+	}
 	
 	public int compareTo(User other) {
 		Common.notNull(other);

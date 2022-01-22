@@ -8,7 +8,6 @@ import java.net.*;
 import winsome.server.data.*;
 import winsome.util.*;
 import winsome.annotations.NotNull;
-import winsome.server.action.*;
 
 /**
  * Reward management service. This class handles rewards calculations and client multicast notifies.
@@ -26,13 +25,42 @@ final class RewardManager extends Thread {
 	private MulticastSocket socket;
 	private InetAddress address;
 	private transient Table<String, Wallet> wallets;
-	private ActionRegistry registry;
-	private RewardCalculator<Integer, List<Integer>> calculator;
+	private transient Table<Long, Post> posts;
+	private final long period;
+	private final TimeUnit periodUnit;
+	private RewardCalculator < List<Rate>, Map<String,Pair<Integer,List<Comment>>> > calculator;
 	private State state;
+	
+	/** Conversion map from MILLISECONDS to other TimeUnits not "less than" milliseconds. */
+	private static final Map<String, Long> convMap = CollectionsUtils.newHashMapFromCollections(
+		CollectionsUtils.toList("DAYS", "HOURS", "MILLISECONDS", "MINUTES", "SECONDS"),
+		CollectionsUtils.toList(86_400_000L, 3_600_000L, 1L, 60_000L, 1000L)
+	);
+	
+	/**
+	 * Conversion of a period expressed in a TimeUnit into its equivalent in milliseconds.
+	 * @param period Period.
+	 * @param unit TimeUnit.
+	 * @return The value of period converted in milliseconds.
+	 */
+	public static long normalize(long period, TimeUnit unit) {
+		String str = unit.toString();
+		Long val = convMap.get(str);
+		if (val != null) return period * val;
+		else throw new IllegalArgumentException("Invalid TimeUnit");
+	}
 	
 	private DatagramPacket buildPacket() {
 		String msg = NOTIFYMSG + new Date().toString().substring(0, 19);
 		return new DatagramPacket(msg.getBytes(), msg.length(), address, mcastPort);
+	}
+	
+	private void await(long timeout) throws InterruptedException {
+		while (true) {
+			long rem = timeout - System.currentTimeMillis();
+			if (rem > 0) Thread.sleep(rem);
+			else break;
+		}
 	}
 	
 	public final int mcastMsgLen() { return 19 + NOTIFYMSG.length(); }
@@ -41,40 +69,24 @@ final class RewardManager extends Thread {
 	 * 1. Crea il socket di multicast e invia le notifiche lì
 	 * 2. Aggiorna i portafogli degli utenti.
 	 */
-	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort, Table<String, Wallet> wallets, ActionRegistry registry,
-		double rewAuth, double rewCur, Map<Long, Double> iterationMap, List<Action> toReward) throws IOException {
+	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort,
+			Table<String, Wallet> wallets, Table<Long, Post> posts, Pair<Long, TimeUnit> periods,
+			double rewAuth, double rewCur) throws IOException {
 		
-		Common.notNull(server, mcastAddr, wallets, registry);
+		Common.notNull(server, mcastAddr, wallets, posts);
 		Common.allAndArgs(mcastPort >= 0, rewAuth >= 0.0, rewCur >= 0, rewAuth + rewCur == TOTREWPERC);
-		socket = new MulticastSocket(socketPort);
-		address = InetAddress.getByName(mcastAddr);
-		state = State.INIT;
+		this.socket = new MulticastSocket(socketPort);
+		this.address = InetAddress.getByName(mcastAddr);
+		this.state = State.INIT;
 		this.server = server;
 		this.mcastPort = mcastPort;
 		this.wallets = wallets;
-		this.registry = registry;
-		this.calculator = new RewardCalculatorImpl(rewAuth, rewCur, iterationMap);
-		if ((toReward != null) && !toReward.isEmpty()) {
-			Map<String, Double> rewards = calculator.computeReward(toReward);
-			for (String user : rewards.keySet()) {
-				Wallet w = wallets.get(user);
-				Common.allAndState( w.newTransaction(rewards.get(user)) );
-			}
-		}
+		this.posts = posts;
+		this.period = periods.getKey();
+		this.periodUnit = periods.getValue();
+		this.calculator = new RewardCalculatorImpl(rewAuth, rewCur);
 	}
-	
-	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort, Table<String, Wallet> wallets,
-		ActionRegistry registry, double rewAuth, double rewCur, Map<Long, Double> iterationMap) throws IOException {
-		this(server, mcastAddr, socketPort, mcastPort, wallets, registry, rewAuth, rewCur, iterationMap, null);
-	}
-	
-	public RewardManager(WinsomeServer server, String mcastAddr, int socketPort, int mcastPort,
-		Table<String, Wallet> wallets, Pair<Long, TimeUnit> pair, double rwAuthPerc, double rwCurPerc,
-		Map<Long, Double> iterationMap) throws IOException {
-		this(server, mcastAddr, socketPort, mcastPort, wallets, new ActionRegistry(pair), rwAuthPerc,
-			rwCurPerc, iterationMap);
-	}
-
+		
 	public void run() {
 		Logger logger = server.logger();
 		logger.log("RewardManager service started");
@@ -91,39 +103,37 @@ final class RewardManager extends Thread {
 			
 			InetSocketAddress mcastaddr = new InetSocketAddress(address, mcastPort);
 			socket.joinGroup(mcastaddr, net);
-			Common.allAndState(registry.open());
-			List<Action> completed = new ArrayList<>();
 			Map<String, Double> rewards;
 			DatagramPacket packet;
 			
+			long
+				now = System.currentTimeMillis(),
+				normPeriod = RewardManager.normalize(period, periodUnit),
+				timeout = now + normPeriod;
+			
 			while (!this.isClosed()) {
-				if (registry.getActions(completed)) {
-					rewards = calculator.computeReward(completed);
-					for (String user : rewards.keySet()) {
-						Wallet w = wallets.get(user);
-						Common.allAndState( w.newTransaction(rewards.get(user)) );
-					}
-					packet = buildPacket();
-					socket.send(packet);
-					logger.log("Reward update notify sent (#%d time)", time);
-					time++;
-				} else if (!this.isClosed()) throw new IllegalStateException();
-				completed.clear();
+				this.await(timeout);
+				rewards = calculator.computeReward(posts, timeout);
+				double totRew = Common.doubleSum(rewards.values());
+				logger.log("Calculated rewards: %s", Double.toString(totRew));
+				timeout += normPeriod;
+				for (String user : rewards.keySet()) {
+					Wallet w = wallets.get(user);
+					Common.allAndState( w.newTransaction(rewards.get(user)) );
+				}
+				packet = buildPacket();
+				socket.send(packet);
+				logger.log("Reward update notify sent (#%d time)", time);
+				time++;
 			}
 			socket.leaveGroup(mcastaddr, net);
 		} catch (InterruptedException ie) {
 			logger.log("Exception caught: %s : %s", ie.getClass().getSimpleName(), ie.getMessage());
 		} catch (Exception ex) {
-			logger.logStackTrace(ex);
+			logger.logException(ex);
 			if (ex.getClass().equals(IllegalStateException.class)) server.signalIllegalState(ex);
 		} finally {
 			socket.close();
-			registry.close();
-			logger.log("Registry closed");
-			if ( !server.updateIters(((RewardCalculatorImpl)calculator).getIterationMap()) ) {
-				logger.log("Failed to update posts iteration");
-				server.signalIllegalState(new DataException());
-			} else logger.log("Posts iterations updated");
 			logger.log("RewardManager service ended");
 		}
 	}

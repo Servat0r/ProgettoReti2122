@@ -23,11 +23,13 @@ final class ShutdownHook implements Runnable {
 	public ShutdownHook() { this(DFLMSG); }
 	
 	public synchronized void run() {
-		WinsomeServer server = WinsomeServer.getServer();
-		if (server == null || received) return;
-		server.logger().log(interruptMsg);
-		received = true;
-		try { server.close(); }
-		catch (Exception ex) { server.logger().logStackTrace(ex); ex.printStackTrace(); }
+		WinsomeServer server = null;
+		try {
+			server = WinsomeServer.getServer();
+			if (server == null || received) return;
+			server.logger().log(interruptMsg);
+			received = true;
+			server.close();
+		} catch (Exception ex) { server.logger().logException(ex); ex.printStackTrace(); }
 	}
 }
