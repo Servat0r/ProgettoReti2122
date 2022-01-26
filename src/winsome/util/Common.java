@@ -1,8 +1,8 @@
 package winsome.util;
 
 import java.io.*;
-import java.lang.reflect.*;
-import java.nio.ByteBuffer;
+import java.nio.*;
+import java.nio.charset.*;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.function.*;
@@ -12,6 +12,7 @@ import com.google.gson.Gson;
 import com.google.gson.stream.*;
 
 import winsome.annotations.NotNull;
+import winsome.common.msg.Message;
 
 
 /**
@@ -23,31 +24,6 @@ public final class Common {
 	public static final String SEPAR = ": ";
 	
 	private Common() {}
-	
-	public static void printParams(String className, String methodName) throws ClassNotFoundException {
-		List<Method> methods = Arrays.asList(Class.forName(className).getDeclaredMethods());
-		List<String> res = new ArrayList<>();
-		for (Method m : methods) {
-			if (m.getName().equals(methodName)) {
-				Arrays.asList(m.getParameters()).forEach( param -> res.add(param.getName() + ": " + param.getType()) );
-			}
-		}
-		String str = CollectionsUtils.strReduction(res, "\n", "{\n", "\n}", s -> s);
-		System.out.println(str);
-	}
-	
-	public static void printParams(Class<?> cl, String methodName) throws ClassNotFoundException
-		{ printParams(cl.getCanonicalName(), methodName); }
-	
-	public static void genericDesc(Object obj, List<String> objParams, Map<String, Type> fieldParams){
-		Common.notNull(obj, objParams, fieldParams);
-		Class<?> cl = obj.getClass();
-		
-		objParams.add(cl.toGenericString());
-		for (TypeVariable<?> tv : cl.getTypeParameters()) objParams.add(tv.getTypeName());
-		
-		for (Field field : cl.getDeclaredFields()) fieldParams.put(field.getName(), field.getGenericType());
-	}
 	
 	/**
 	 * Factory of regex matching functions.
@@ -407,14 +383,20 @@ public final class Common {
 	 * @param str String to be encoded.
 	 * @return The number of bytes written.
 	 */
-	public static int lengthStringToByteArray(byte[] result, int startIndex, String str) {
-		Common.allAndArgs(result != null, str != null, startIndex >= 0, startIndex + str.getBytes().length <= result.length);
-		byte[] bstr = str.getBytes();
-		int len = bstr.length;
+	public static int lengthStringToByteArray(byte[] result, int startIndex, String str, Charset charset) {
+		Common.allAndArgs(result != null, str != null, startIndex >= 0); 
+		byte[] bstr = str.getBytes(charset);
+		return Common.lengthBytesToByteArray(result, startIndex, bstr);
+	}
+	
+	public static int lengthBytesToByteArray(byte[] result, int startIndex, byte[] src) {
+		Common.allAndArgs(result != null, src != null, startIndex >= 0);
+		int len = src.length;
+		Common.allAndArgs(startIndex + len + Integer.BYTES <= result.length);
 		int res = Common.intsToByteArray(result, startIndex, len);
-		for (int i = 0; i < len; i++) result[startIndex + res + i] = bstr[i];
+		System.arraycopy(src, 0, result, startIndex + res, len);
 		res += len;
-		return res;
+		return res;		
 	}
 	
 	/**
@@ -481,40 +463,6 @@ public final class Common {
 	public static byte[] readNBytes(InputStream in, int length) throws IOException
 		{ return Common.readNBytes(in, length, true); }
 	
-	
-	public static String printFields(Object obj) {
-		Common.notNull(obj);
-		List<Field> fields = Arrays.asList(obj.getClass().getDeclaredFields());
-		fields.forEach(f -> f.setAccessible(true));
-		List<String> datas = new ArrayList<>();
-		
-		CollectionsUtils.remap(fields, datas, f -> {
-			try {
-				String format = "%s : %s : '%s'", internal;
-				if (f.get(obj) == null) internal = "null";
-				else if ( f.get(obj).getClass().isArray() ) {
-					Object[] o = (Object[])f.get(obj);
-					List<Object> l = new ArrayList<>();
-					for (Object item : o) l.add(item);
-					internal = CollectionsUtils.strReduction(l, ", ", "[", "]", Objects::toString);
-				} else internal = Objects.toString(f.get(obj));
-				return String.format(format, f.getName(), f.getType().getSimpleName(), internal);
-			} catch (IllegalArgumentException | IllegalAccessException e) { e.printStackTrace(); return null; }
-		});
-		
-		fields.forEach(f -> f.setAccessible(false));
-		
-		return CollectionsUtils.strReduction(datas, "; ", "{", "}", Objects::toString);
-	}
-	
-	public static String printFieldsNames(Object obj) {
-		Common.notNull(obj);
-		List<Field> fields = Arrays.asList(obj.getClass().getDeclaredFields());
-		List<String> datas = new ArrayList<>();
-		CollectionsUtils.remap( fields, datas, f -> f.getName() + " : " + f.getType().getSimpleName() );		
-		return CollectionsUtils.strReduction(datas, "; ", "{", "}", Objects::toString);
-	}
-	
 	/**
 	 * Creates a new string by concatenating length copies of c, or an empty string if length == 0.
 	 * @param length Length of the target string.
@@ -537,4 +485,12 @@ public final class Common {
 		catch (InterruptedException ie) { return false; }
 	}
 	/* SLEEP */
+
+	public static List<String> convertArgs(Message msg){
+		List<String> result = new ArrayList<>();
+		CollectionsUtils.remap( msg.getArguments(), result, 
+			bytes -> new String(bytes, msg.getCharset())
+		);
+		return result;
+	}
 }

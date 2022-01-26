@@ -1,8 +1,12 @@
 package winsome.common.msg;
 
 import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.SocketException;
 import java.nio.channels.*;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import winsome.annotations.NotNull;
@@ -37,6 +41,10 @@ import winsome.util.*;
  */
 public final class Message {
 	
+	public static final Charset
+		DFLCHARSET = Charset.defaultCharset(),
+		ASCII = StandardCharsets.US_ASCII;
+	
 	/* Error messages */
 	public static final String
 	INV_ID_BYTE = "Invalid identifier: '%d'",
@@ -45,128 +53,173 @@ public final class Message {
 	INV_PARAM_STR = "Invalid param: '%s'",
 	UNKNOWN_MSG = "Unknwown message";
 	
+	public static final int
+		IDSHIFT		= (Short.BYTES + 1) * Byte.SIZE,
+		OPTSHIFT	= Short.BYTES * Byte.SIZE,
+		INTBYTES	= Integer.BYTES;
+	
 	/* Identifier strings (some of them are also used as parameters for response messages (OK/ERR)) */
-	public static final String
-		OK = "ok", /* Successful operation */
-		ERR = "error", /* Error */
-		REG = "register", /* Register */
-		LOGIN = "login", /* Login */	
-		LOGOUT = "logout", /* Logout */
-		LIST = "list", /* List (users/followers/following); OK param for sending users/following/blog/feed */
-		FOLLOW = "follow",
-		UNFOLLOW = "unfollow",
-		BLOG = "blog",
-		POST = "post", /* Also used as OK param for sending post data and as SHOW param for requesting post data */
-		SHOW = "show",
-		DELETE = "delete",
-		REWIN = "rewin",
-		RATE = "rate",
-		COMMENT = "comment",
-		WALLET = "wallet", /* Also used as OK param for sending wallet data */
-		HELP = "help",
-		QUIT = "quit", EXIT = "exit"; /* Also used as OK params for sending confirmation messages for regular client exits */
+	public static final int
+		HSHAKE = 1 << IDSHIFT,
+		OK = 2 << IDSHIFT, /* Successful operation */
+		ERROR = 3 << IDSHIFT, /* Error */
+		REGISTER = 4 << IDSHIFT, /* Register */
+		LOGIN = 5 << IDSHIFT, /* Login */	
+		LOGOUT = 6 << IDSHIFT, /* Logout */
+		LIST = 7 << IDSHIFT, /* List (users/followers/following); OK param for sending users/following/blog/feed */
+		FOLLOW = 8 << IDSHIFT,
+		UNFOLLOW = 9 << IDSHIFT,
+		BLOG = 10 << IDSHIFT,
+		POST = 11 << IDSHIFT, /* Also used as OK param for sending post data and as SHOW param for requesting post data */
+		SHOW = 12 << IDSHIFT,
+		DELETE = 13 << IDSHIFT,
+		REWIN = 14 << IDSHIFT,
+		RATE = 15 << IDSHIFT,
+		COMMENT = 16 << IDSHIFT,
+		WALLET = 17 << IDSHIFT, /* Also used as OK param for sending wallet data */
+		HELP = 18 << IDSHIFT,
+		QUIT = 19 << IDSHIFT,
+		EXIT = 20 << IDSHIFT, /* Also used as OK params for sending confirmation messages for regular client exits */
+		MORE = 21 << IDSHIFT;
 	
 	/* Parameter strings */
-	public static final String
-		EMPTY = "", /* For messages with no (real) parameters */
-		INFO = "info", /* OK param for sending multicast data and followers list */
-		USERS = "users",
-		FOLLOWERS = "followers",
-		FOLLOWING = "following",
-		USLIST = "userlist",
-		PSLIST = "postlist",
-		FEED = "feed",
-		BTC = "btc",
-		NOTIFY = "notify";
+	public static final int
+		EMPTY = 0, /* For messages with no (real) parameters */
+		INFO = 1, /* OK param for sending multicast data and followers list */
+		USERS = 2,
+		FOLLOWERS = 3,
+		FOLLOWING = 4,
+		USLIST = 5,
+		PSLIST = 6,
+		POSTDATA = 7,
+		WALLETDATA = 8,
+		FEED = 9,
+		BTC = 10,
+		NOTIFY = 11;
 	
-	public static final List<String> COMMANDS = CollectionsUtils.toList(
-		OK, ERR, REG, LOGIN, LOGOUT, LIST, FOLLOW, UNFOLLOW, BLOG, POST, SHOW,
-		DELETE, REWIN, RATE, COMMENT, WALLET, HELP, QUIT, EXIT
+	public static final List<Integer> COMMANDS = CollectionsUtils.toList(
+		HSHAKE, OK, ERROR, REGISTER, LOGIN, LOGOUT, LIST, FOLLOW, UNFOLLOW, BLOG,
+		POST, SHOW, DELETE, REWIN, RATE, COMMENT, WALLET, HELP, QUIT, EXIT, MORE
 	);
 	
-	private static final List<String> emptyList = CollectionsUtils.toList(EMPTY);
-	
-	public static final Map<String, List<String>> CODES = CollectionsUtils.newHashMapFromCollections(
-		COMMANDS,
+	public static final List<Integer> PARAMS = CollectionsUtils.toList(
+		EMPTY, INFO, USERS, FOLLOWERS, FOLLOWING, USLIST,
+		PSLIST, POSTDATA, WALLETDATA, FEED, BTC, NOTIFY
+	);
+		
+	public static final Map<Integer, List<Integer>> CODES = CollectionsUtils.newHashMapFromCollections(
+		Arrays.asList(OK, LIST, SHOW, WALLET),
 		Arrays.asList(
-			Arrays.asList(EMPTY, INFO, USLIST, PSLIST, POST, WALLET, QUIT, EXIT),
-			emptyList,
-			emptyList,			
-			emptyList,			
-			emptyList,			
+			Arrays.asList(EMPTY, INFO, USLIST, PSLIST, POSTDATA, WALLETDATA),
 			Arrays.asList(USERS, FOLLOWERS, FOLLOWING),
-			emptyList,			
-			emptyList,			
-			emptyList,			
-			emptyList,			
-			Arrays.asList(FEED, POST),
-			emptyList,			
-			emptyList,			
-			emptyList,			
-			emptyList,			
-			Arrays.asList(EMPTY, BTC, NOTIFY),
-			emptyList,
-			emptyList,			
-			emptyList		
+			Arrays.asList(FEED, POSTDATA),
+			Arrays.asList(EMPTY, BTC, NOTIFY)
 		)
 	);
 	
-	private final int idCode, paramCode, argN;
+	private final int code, argN;
 	@NotNull
-	private final String idStr, paramStr;
-	@NotNull
-	private final List<String> arguments;
+	private final List<byte[]> arguments;
+	private final String charset;
 	private int length; /* Total length of the message */
 	
-	/**
-	 * Converts a couple (id, param) representing id and param of a Message object into its corresponding
-	 * integer couple as integer array.
-	 * @param id Message identifier.
-	 * @param param Message param.
-	 * @return An integer array containing encoding of (id, param).
-	 * @throws MessageException If id corresponds to an invalid command or param corresponds to an invalid param.
-	 * @throws IllegalArgumentException If id == null.
-	 */
-	@NotNull
-	public static final int[] getCode(String id, String param) throws MessageException {
-		Common.notNull(id);
-		if (param == null) param = EMPTY;
-		int[] result = new int[] {-1, -1}; // -1 -> not given
-		result[0] = COMMANDS.indexOf(id);
-		if (result[0] == -1) throw new MessageException(Common.excStr(INV_ID_STR, id));
-		List<String> cvect = CODES.get(id);
-		result[1] = cvect.indexOf(param);
-		if (result[1] == -1) throw new MessageException(Common.excStr(INV_PARAM_STR, param));
-		return result;
+	public static final int
+		IDMASK		= (-1)*(int)Math.pow(2, IDSHIFT),	//0xff000000
+		OPTSMASK	= 0xff << OPTSHIFT,					//0x00ff0000
+		PARMASK		= (int)Math.pow(2, OPTSHIFT) - 1;	//0x0000ffff
+	
+	private static final Map<Integer, String> getCodeConsts() throws IllegalArgumentException, IllegalAccessException{
+		Map<Integer, String> consts = new LinkedHashMap<>();
+		Field[] fields = Message.class.getDeclaredFields();
+		for (Field f : fields) {
+			if ( Modifier.isStatic(f.getModifiers()) ) {
+				int val = f.getInt(Message.class);
+				int index;
+				if ((val & IDMASK) == val) {
+					index = COMMANDS.indexOf(val);
+					if ( index >= 0 && index < COMMANDS.size() ) consts.put(val, f.getName().toLowerCase());
+				} else if ((val & PARMASK) == val) {
+					index = PARAMS.indexOf(val);
+					if ( index >= 0 && index < PARAMS.size() ) consts.put(val, f.getName().toLowerCase());
+				}
+			}
+		}
+		return consts;
 	}
 	
-	/** See {@link #getCode(String, String)} */
-	@NotNull
-	public static final int[] getCode(String id) throws MessageException { return getCode(id, null); }
+	public static int toIDCode(String str) throws MessageException {
+		Common.notNull(str);
+		str = str.toUpperCase();
+		Field f = null;
+		int val = 0;
+		try { f = Message.class.getDeclaredField(str); }
+		catch (NoSuchFieldException nsfe) { throw new MessageException( Common.excStr(INV_ID_STR, str) ); }
+		if (!Modifier.isStatic(f.getModifiers())) throw new MessageException( Common.excStr(INV_ID_STR, str) );
+		try { val = f.getInt(Message.class); }
+		catch (IllegalAccessException iae) { throw new MessageException("Internal error when fetching id code"); }
+		if ((val & IDMASK) == val || !COMMANDS.contains(val)) throw new MessageException( Common.excStr(INV_ID_STR, str) );
+		return val;
+	}
 	
-	/**
-	 * Decodes (idCode, paramCode) into a couple (id, param) representing id and param of the current message.
-	 * @param idCode Int representing id.
-	 * @param paramCode Int representing param (-1 if there are no params).
-	 * @return A String array of length 2 containing the decoded strings.
-	 * @throws MessageException For unrecognized id or param.
-	 */
+	public static int toParamCode(String str) throws MessageException {
+		Common.notNull(str);
+		if (str.isEmpty()) return Message.EMPTY;
+		str = str.toUpperCase();
+		Field f = null;
+		int val = 0;
+		try { f = Message.class.getDeclaredField(str); }
+		catch (NoSuchFieldException nsfe) { throw new MessageException( Common.excStr(INV_PARAM_STR, str) ); }
+		if (!Modifier.isStatic(f.getModifiers())) throw new MessageException( Common.excStr(INV_PARAM_STR, str) );
+		try { val = f.getInt(Message.class); }
+		catch (IllegalAccessException iae) { throw new MessageException(); }
+		if ((val & PARMASK) == val || !PARAMS.contains(val)) throw new MessageException( Common.excStr(INV_PARAM_STR, str) );
+		return val;		
+	}
+	
+	public static boolean checkCode(int code) throws MessageException {
+		int idCode = code & IDMASK, paramCode = code & PARMASK, nopts = (code & OPTSMASK) >> OPTSHIFT;
+		return Message.checkIdParam(idCode, paramCode, nopts);
+	}
+	
+	public static boolean checkIdParam(int idCode, int paramCode, int nopts) throws MessageException {
+		Common.allAndArgs(
+			(idCode & PARMASK) == idCode, (paramCode & PARMASK) == paramCode,
+			nopts >= 0, nopts < (2 << Byte.SIZE)
+		);
+		if (!COMMANDS.contains(idCode)) throw new MessageException(INV_ID_BYTE);
+		if (!PARAMS.contains(paramCode)) throw new MessageException(INV_PARAM_BYTE);
+		List<Integer> params = CODES.get(idCode);
+		if (params == null) return (paramCode == Message.EMPTY);
+		else return params.contains(paramCode);
+	}
+	
+	public static boolean checkIdParam(int idCode, int paramCode) throws MessageException {
+		return Message.checkIdParam(idCode, paramCode, 0);
+	}
+	
+	public static int getCode(int idCode, int paramCode, int nopts) throws MessageException {
+		if (!Message.checkIdParam(idCode, paramCode, nopts)) throw new MessageException();
+		return idCode + paramCode + (nopts << OPTSHIFT);
+	}
+		
+	public static int getCode(int idCode, int paramCode) throws MessageException {
+		return Message.getCode(idCode, paramCode, 0);
+	}
+	
 	@NotNull
-	public static final String[] getIdParam(int idCode, int paramCode) throws MessageException {
-		if ( !(idCode >= 0 && idCode < COMMANDS.size()) )
-			throw new MessageException(Common.excStr(INV_ID_BYTE, idCode));
-		
-		if ( !(paramCode >= -1) )
-			throw new MessageException(Common.excStr(INV_PARAM_BYTE, paramCode));
-		
-		String id = new String(COMMANDS.get(idCode));
-		String param = new String(EMPTY);
-		List<String> l = CODES.get(id);
-		if (l == null) throw new IllegalStateException();
-		if ( paramCode == -1 || (paramCode >= l.size()) )
-			throw new MessageException(Common.excStr( INV_PARAM_BYTE, paramCode));
-		param = new String( l.get(paramCode) );
-		return new String[] {id, param};
+	public static String[] toIdParamStrs(int idCode, int paramCode) throws MessageException {
+		if (!Message.checkIdParam(idCode, paramCode, 0)) throw new MessageException();
+		try {
+			Map<Integer, String> names = Message.getCodeConsts();
+			String[] res = new String[] {names.get(idCode), names.get(paramCode)};
+			return res;
+		} catch (IllegalAccessException iae) { throw new MessageException(); }
+	}
+	
+	@NotNull
+	public static String[] toIdParamStrs(int code) throws MessageException {
+		int idCode = (code & IDMASK), paramCode = (code & PARMASK);
+		return Message.toIdParamStrs(idCode, paramCode);
 	}
 	
 	/**
@@ -176,9 +229,10 @@ public final class Message {
 	 * @return A new (OK, EMPTY) Message object.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newOK(String format, Object...objs) {
+	public static Message newOK(String charset, String format, Object...objs) {
 		String message = String.format(format, objs);
-		try { return new Message( OK, EMPTY, CollectionsUtils.toList(message) ); } catch (MessageException mex) { return null; }
+		try { return new Message( OK, EMPTY, CollectionsUtils.toList(message), charset ); }
+		catch (MessageException mex) { return null; }
 	}
 	
 	/**
@@ -188,11 +242,12 @@ public final class Message {
 	 * @return A new (ERR, EMPTY) Message object.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newError(String format, Object...objs) {
+	public static Message newError(String charset, String format, Object...objs) {
 		String message = String.format(format, objs);
-		try{ return new Message(ERR, EMPTY, CollectionsUtils.toList(message)); } catch (MessageException mex) { return null; }
+		try{ return new Message(ERROR, EMPTY, CollectionsUtils.toList(message), charset); }
+		catch (MessageException mex) { return null; }
 	}
-
+	
 	/**
 	 * Creates a new info message (multicast data + followers list) with a formatted text message for the receiver.
 	 * @param ip Multicast group IP address.
@@ -203,10 +258,11 @@ public final class Message {
 	 * @return A new (OK, INFO) Message object.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newInfo(String ip, int port, int mcastMsgLen, List<String> users, String fmt, Object...objs) {
+	public static Message newInfo(String charset, String ip, int port, int mcastMsgLen, List<String> users, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
 		List<String> args = CollectionsUtils.toList(users, message, ip, Integer.toString(port), Integer.toString(mcastMsgLen));
-		try { return new Message(OK, INFO, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, INFO, args, charset); }
+		catch (MessageException mex) { return null; }
 	}
 	
 	/**
@@ -218,10 +274,11 @@ public final class Message {
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newUserList(List<String> items, String fmt, Object...objs) {
+	public static Message newUserList(String charset, List<String> items, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
 		List<String> args = CollectionsUtils.toList(items, message);
-		try { return new Message(OK, USLIST, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, USLIST, args, charset); }
+		catch (MessageException mex) { return null; }
 	}
 	
 	/**
@@ -233,10 +290,11 @@ public final class Message {
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newPostList(List<String> items, String fmt, Object...objs) {
+	public static Message newPostList(String charset, List<String> items, String fmt, Object...objs) {
 		String message = String.format(fmt, objs);
 		List<String> args = CollectionsUtils.toList(items, message);
-		try { return new Message(OK, PSLIST, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, PSLIST, args, charset); }
+		catch (MessageException mex) { return null; }
 	}
 	
 	/**
@@ -252,11 +310,12 @@ public final class Message {
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newPost(String title, String content, String likes, String dislikes,
+	public static Message newPost(String charset, String title, String content, String likes, String dislikes,
 		List<String> comments, String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
 		List<String> args = CollectionsUtils.toList(comments, message, title, content, likes, dislikes);
-		try { return new Message(OK, POST, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, POSTDATA, args, charset); }
+		catch (MessageException mex) { return null; }
 	}
 		
 	/**
@@ -269,10 +328,11 @@ public final class Message {
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newWallet(double value, List<String> transactions, String fmt, Object...objects) {
+	public static Message newWallet(String charset, double value, List<String> transactions, String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
 		List<String> args = CollectionsUtils.toList(transactions, message, Double.toString(value));
-		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, WALLETDATA, args, charset); }
+		catch (MessageException mex) { return null; }
 	}
 	
 	/**
@@ -286,25 +346,14 @@ public final class Message {
 	 * @throws MessageException If thrown by constructor or if {@link List#addAll(Collection)} fails.
 	 * @throws IllegalArgumentException If thrown by constructor.
 	 */
-	public static Message newBtcWallet(double btcValue, double value, List<String> transactions,
+	public static Message newBtcWallet(String charset, double btcValue, double value, List<String> transactions,
 		String fmt, Object...objects) {
 		String message = String.format(fmt, objects);
 		List<String> args = CollectionsUtils.toList(transactions, message, Double.toString(btcValue), Double.toString(value));
-		try { return new Message(OK, WALLET, args); } catch (MessageException mex) { return null; }
+		try { return new Message(OK, WALLETDATA, args, charset); }
+		catch (MessageException mex) { return null; }
 	}
-	
-	/**
-	 * Create a new (response) message for confirming client exit after a {@link #EXIT} or {@link QUIT} request.
-	 * @param fmt Format string.
-	 * @param objects Objects to format.
-	 * @return A new (OK, QUIT) Message object.
-	 */
-	public static Message newQuit(String fmt, Object...objects) {
-		String message = String.format(fmt, objects);
-		List<String> args = CollectionsUtils.toList(message);
-		try { return new Message(OK, QUIT, args); } catch (MessageException mex) { return null; }		
-	}
-	
+		
 	/**
 	 * Converts a {@link Command} to a Message object.
 	 * @param cmd Input command.
@@ -312,42 +361,44 @@ public final class Message {
 	 * @throws MessageException If thrown by Message constructor.
 	 */
 	@NotNull
-	public static Message newMessageFromCmd(Command cmd) throws MessageException {
+	public static Message newMessageFromCmd(Command cmd, String charset) throws MessageException {
 		Common.notNull(cmd);
 		List<String> args = CollectionsUtils.toList(cmd.getArgs());
-		return new Message(cmd.getId(), cmd.getParam(), args);
+		int
+			cmdId = Message.toIDCode(cmd.getId()),
+			cmdParam = Message.toParamCode(cmd.getParam());
+		return new Message(cmdId, cmdParam, args, charset);
 	}
-	
-	public Message(String id, String param, List<String> arguments) throws MessageException {
-		Common.notNull(id);
-		if (param == null) param = Message.EMPTY;
-		int[] codes = Message.getCode(id, param);
-		this.idCode = codes[0];
-		this.paramCode = codes[1];
-		this.idStr = id;
-		this.paramStr = param;
-		this.arguments = (arguments != null ? arguments : new ArrayList<>());
-		this.argN = this.arguments.size();
-		int argsLen = 0;
-		for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
-		this.length = 3 * Integer.BYTES + Integer.BYTES * this.argN + argsLen;
+		
+	public Message(int idCode, int paramCode, List<String> arguments, String charset) throws MessageException {
+		this(Message.getCode(idCode, paramCode), arguments, charset);
 	}
 	
 	public Message(int idCode, int paramCode, List<String> arguments) throws MessageException {
-		Common.notNull(arguments);
-		
-		String[] strCodes = Message.getIdParam(idCode, paramCode);
-		
-		this.idCode = idCode;
-		this.paramCode = paramCode;		
-		this.idStr = strCodes[0];
-		this.paramStr = strCodes[1];
-		this.arguments = (arguments != null ? arguments : new ArrayList<>());
-		this.argN = this.arguments.size();
-		int argsLen = 0;
-		for (int i = 0; i < argN; i++) argsLen += arguments.get(i).getBytes().length;
-		this.length = 3 * Integer.BYTES + Integer.BYTES * this.argN + argsLen;
+		this(Message.getCode(idCode, paramCode), arguments, null);
 	}
+	
+	public Message(int code, List<String> arguments, String charset) throws MessageException {
+		if (!Message.checkCode(code)) throw new MessageException();
+		
+		int nopts = (charset != null ? 1 : 0);
+		this.charset = (charset != null ? new String(charset.getBytes(ASCII), ASCII) : null);
+		this.code = code + (nopts << OPTSHIFT);
+		
+		if (arguments == null) arguments = new ArrayList<>();
+		this.arguments = new ArrayList<>();
+		CollectionsUtils.remap(arguments, this.arguments, str -> {
+			try { return str.getBytes(this.charset); }
+			catch (UnsupportedEncodingException ex) { return str.getBytes(StandardCharsets.UTF_8); }
+		});
+		this.argN = this.arguments.size();
+		byte[] chset = charset.getBytes(ASCII);
+		int argsLen = chset.length + INTBYTES;
+		for (int i = 0; i < argN; i++) argsLen += this.getArg(i).length;
+		this.length = INTBYTES * (2 + this.argN) + argsLen;
+	}
+	
+	public Message(int code, List<String> arguments) throws MessageException { this(code, arguments, null); }
 	
 	/**
 	 * Encodes a Message into a byte array to send to a stream/channel.
@@ -360,31 +411,41 @@ public final class Message {
 	 * @return A byte array containing the encoded message.
 	 */
 	public final byte[] encode() {
-		byte[] result = new byte[this.length + Integer.BYTES];
+		byte[] result = new byte[this.length + INTBYTES];
 		int index = 0;
-		index += Common.intsToByteArray(result, index, this.length, this.idCode, this.paramCode, this.argN);
+		index += Common.intsToByteArray(result, index, this.length, this.code, this.argN);		
+		index += Common.lengthStringToByteArray(result, index, charset, ASCII);
 		for (int i = 0; i < this.argN; i++) {
-			index += Common.lengthStringToByteArray(result, index, this.arguments.get(i));
+			byte[] curr = this.arguments.get(i);
+			index += Common.lengthBytesToByteArray(result, index, curr);
 		}
 		Common.allAndState(index == result.length);
 		return result;
 	}
 	
-	@NotNull
-	public final String getIdStr() { return this.idStr; }
+	public final int getCode() { return code; }
+	public final int getIdCode() { return (code & IDMASK); }
+	public final int getParamCode() { return (code & PARMASK); }
+	public final int getArgN() { return argN; }
+	public final List<byte[]> getArguments() { return arguments; }
+	public final byte[] getArg(int index) { return arguments.get(index); }
+	public final String getCharsetName() { return charset; }
+	public final Charset getCharset() { return Charset.forName(charset); }
+	public final boolean isEmpty() { return argN == 0; }
 	
-	@NotNull
-	public final String getParamStr() { return this.paramStr; }
-	
-	@NotNull
-	public final String[] getIdParam() {
-		return new String[] {idStr, paramStr};
+	public final byte[] getHeader() {
+		byte[] header = new byte[2 * INTBYTES];
+		Common.intsToByteArray(header, 0, code, argN);
+		return header;
 	}
 	
-	public final int getIdCode() { return idCode; }
-	public final int getParamCode() { return paramCode; }
-	public final int getArgN() { return argN; }
-	public final List<String> getArguments() { return arguments; }
+	public final byte[] getLengths() {
+		byte[] lengths = new byte[this.argN * INTBYTES];
+		for (int i = 0; i < this.argN; i++)
+			Common.intsToByteArray(lengths, i * INTBYTES, arguments.get(i).length);
+		return lengths;
+	}
+	
 	public final int getLength() { return length; }
 	
 	/**
@@ -419,7 +480,7 @@ public final class Message {
 	 * @return A Message object representing the message received on success, null if message
 	 * reading has not correctly completed (e.g. EOS closed by other peer).
 	 * @throws IOException Thrown by {@link MessageBuffer#writeAllToArray(int, ReadableByteChannel)}
-	 * @throws MessageException Thrown by {@link #getIdParam(byte, byte)} (invalid id/param) or by
+	 * @throws MessageException Thrown by {@link #toIdParamStrs(byte, byte)} (invalid id/param) or by
 	 *  Message constructor.
 	 * @throws NullPointerException If chan == null or buf == null.
 	 */
@@ -429,25 +490,31 @@ public final class Message {
 		Common.notNull(chan, buf);
 		String cArg;
 		buf.clear();
-		byte[] readArr = buf.writeAllToArray(Integer.BYTES, chan);
-		Common.allAndConnReset(readArr != null, readArr.length == Integer.BYTES); /* EOS reached etc. */
+		byte[] readArr = buf.writeAllToArray(INTBYTES, chan);
+		Common.allAndConnReset(readArr != null, readArr.length == INTBYTES); /* EOS reached etc. */
 		int length = Common.intFromByteArray(readArr);
 		readArr = buf.writeAllToArray(length, chan);
 		Common.allAndConnReset(readArr != null, readArr.length == length); /* EOS reached etc. */
 		
-		int idCode = Common.intFromByteArray(readArr), paramCode = Common.intFromByteArray(readArr, Integer.BYTES);
-		String[] strCodes = Message.getIdParam(idCode, paramCode);
-		int argN = Common.intFromByteArray(readArr, Integer.BYTES * 2);
-		int index = 3 * Integer.BYTES;
+		int code = Common.intFromByteArray(readArr);
+		int argN = Common.intFromByteArray(readArr, INTBYTES);
+		int index = 2 * INTBYTES;
+		
+		int chsetLen = Common.intFromByteArray(readArr, index);
+		index += INTBYTES;
+		
+		String charset = new String(readArr, index, chsetLen, ASCII);
+		index += chsetLen;
+		
 		List<String> arguments = new ArrayList<>();
 		for (int i = 0; i < argN; i++) {
 			int clen = Common.intFromByteArray(readArr, index);
-			index += Integer.BYTES;
-			cArg = new String(readArr, index, clen);
+			index += INTBYTES;
+			cArg = new String(readArr, index, clen, charset);
 			index += clen;
 			arguments.add(cArg);
 		}
-		return new Message(strCodes[0], strCodes[1], arguments);
+		return new Message(code, arguments, charset);
 	}
 	
 	/**
@@ -462,29 +529,31 @@ public final class Message {
 	public static final Message recvFromStream(InputStream in) throws IOException, MessageException {
 		Common.notNull(in);
 		
-		byte[] lengthArr = Common.readNBytes(in, Integer.BYTES);
+		byte[] lengthArr = Common.readNBytes(in, INTBYTES);
 		int length = Common.intFromByteArray(lengthArr);
 		
 		byte[] result = Common.readNBytes(in, length);
 		
-		int idCode = Common.intFromByteArray(result);
-		int paramCode = Common.intFromByteArray(result, Integer.BYTES);
-		int argN = Common.intFromByteArray(result, 2 * Integer.BYTES);
+		int code = Common.intFromByteArray(result);		
+		int argN = Common.intFromByteArray(result, INTBYTES);
+		int index = 2 * INTBYTES;
 		
-		String[] strCodes = Message.getIdParam(idCode, paramCode);
+		int chsetLen = Common.intFromByteArray(result, index);
+		index += INTBYTES;
 		
-		int index = 3 * Integer.BYTES;
-				
+		String charset = new String(result, index, chsetLen, ASCII);
+		index += chsetLen;
+		
 		List<String> arguments = new ArrayList<>();
 		int clen;
 		for (int i = 0; i < argN; i++) {
 			clen = Common.intFromByteArray(result, index);
-			index += Integer.BYTES;
-			String str = new String(result, index, clen);
+			index += INTBYTES;
+			String str = new String(result, index, clen, charset);
 			index += clen;
 			arguments.add(str);
 		}
-		return new Message(strCodes[0], strCodes[1], arguments);
+		return new Message(code, arguments, charset);
 	}
 	
 	@NotNull

@@ -8,7 +8,7 @@ package winsome.common.msg;
 public final class MessageException extends Exception {
 
 	private static final long serialVersionUID = -5334173006139808696L;		
-
+		
 	public MessageException() { super(); }
 
 	public MessageException(String message) { super(message); }

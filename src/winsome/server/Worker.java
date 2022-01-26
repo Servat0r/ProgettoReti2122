@@ -35,15 +35,14 @@ final class Worker implements Runnable {
 		WinsomeServer server = WinsomeServer.getServer();
 		if (server == null) return;
 		try {
-			String id = null, param = null;
 			this.buf = new MessageBuffer(server.bufferCap());
 			msg = Message.recvFromChannel(client, buf);
-			id = msg.getIdStr();
-			param = msg.getParamStr(); //Cannot throw MessageException
+			
+			int id = msg.getIdCode(), param = msg.getParamCode(); //Cannot throw MessageException
 			String u = server.translateChannel(client);
 			String msgstr = (u != null ? "Received request from user " + u : "Received request from anonymous user ");
 			server.logger().log(msgstr);
-			List<String> args = msg.getArguments();
+			List<String> args = Common.convertArgs(msg);
 			msg = null;
 			switch(id) {
 				case Message.LOGIN : {msg = server.login(skey, args); break;}
@@ -63,7 +62,7 @@ final class Worker implements Runnable {
 				case Message.SHOW : {
 					switch (param) {
 						case Message.FEED : {msg = server.showFeed(skey); break;}
-						case Message.POST : {msg = server.showPost(skey, args); break;}
+						case Message.POSTDATA : {msg = server.showPost(skey, args); break;}
 						default : break;
 					};
 					break;

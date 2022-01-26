@@ -233,40 +233,13 @@ public final class WinsomeClient implements AutoCloseable {
 		Common.notNull(cmd);
 		String id = cmd.getId();
 		String param = cmd.getParam();
-		if (param == null || param == Command.EMPTY) param = new String(Message.EMPTY);
+		if (param == null) param = Command.EMPTY;
 		List<String> args = cmd.getArgs();
 		boolean result;
 		
 		try {
-			if ( id.equals(Message.REG) ) {
-				if (this.isUserSet()) {
-					this.out.println("Error : there is a user already logged in");
-					result = false;
-				} else {
-					List<String> sbargs = new ArrayList<>();
-					for (int i = 2; i < args.size(); i++) sbargs.add(args.get(i));
-					Pair<Boolean, String> pair = this.register(args.get(0), args.get(1), sbargs);
-					result = pair.getKey().booleanValue();
-					this.out.println(pair.getValue());
-				}
-			}
 			
-			else if ( id.equals(Message.LOGIN) ) {
-				String u = args.get(0);
-				result = this.login(args.get(0), args.get(1));
-				if (result) { this.setUsername(u); this.parser.setPrompt("%s> ", u); }
-			}
-			
-			else if ( id.equals(Message.QUIT) || id.equals(Message.EXIT)) {
-				if (this.isUserSet()) return this.printError(ALREADY_LOGGED);
-				else {
-					this.quitReq();
-					this.setState(State.EXIT);
-					result = true;
-				}
-			}
-									
-			else if ( id.equals(CommandParser.CLEAR) ) {
+			if ( id.equals(CommandParser.CLEAR) ) {
 				int code;
 				try { code = new ProcessBuilder("clear").inheritIO().start().waitFor(); }
 				catch (IOException ioe) { logger.logException(ioe); code = 1; }
@@ -275,76 +248,106 @@ public final class WinsomeClient implements AutoCloseable {
 				try { if (code != 0) code = new ProcessBuilder("cmd", "/c", "cls").inheritIO().start().waitFor(); }
 				catch (IOException ioe) { logger.logException(ioe); code = 1; }
 				result = (code == 0);
-			}
 			
-			else if ( id.equals(CommandParser.WAIT) ) {
+			} else if ( id.equals(CommandParser.WAIT) ) {
 				long millis = ConfigUtils.newLong.apply(args.get(0));
 				result = Common.sleep(millis * 1000);
 				out.println("End");
-			}
 			
-			else if ( id.equals(Message.LOGOUT) ) {
-				if (!this.isUserSet()) return this.printError(NONE_LOGGED);
-				else {
-					result = this.logout(this.getUsername());
-					if (result) { this.unsetUsername(); this.parser.resetPrompt(); }
+			} else {
+				int idCode = Message.toIDCode(id), paramCode = Message.toParamCode(param);
+				if (idCode == Message.REGISTER) {
+					if (this.isUserSet()) {
+						this.out.println("Error : there is a user already logged in");
+						result = false;
+					} else {
+						List<String> sbargs = new ArrayList<>();
+						for (int i = 2; i < args.size(); i++) sbargs.add(args.get(i));
+						Pair<Boolean, String> pair = this.register(args.get(0), args.get(1), sbargs);
+						result = pair.getKey().booleanValue();
+						this.out.println(pair.getValue());
+					}
 				}
-			}
-			
-			else if ( id.equals(Message.LIST) ) {
-				if (param.equals(Message.USERS)) result = this.listUsers();
-				else if (param.equals(Message.FOLLOWERS)) result = this.listFollowers();
-				else if (param.equals(Message.FOLLOWING)) result = this.listFollowing();
-				else return this.printError(Common.excStr(INV_PARAM, param));
-			}
-			
-			else if ( id.equals(Message.FOLLOW) ) result = this.followUser(args.get(0));
-			
-			else if ( id.equals(Message.UNFOLLOW) ) result = this.unfollowUser(args.get(0));
-			
-			else if ( id.equals(Message.BLOG) ) result = this.viewBlog();
-			
-			else if ( id.equals(Message.POST) ) result = this.createPost(args.get(0), args.get(1));
-			
-			else if ( id.equals(Message.SHOW) ) {
-				if (param.equals(Message.FEED)) result = this.showFeed();
-				else if (param.equals(Message.POST)) result = this.showPost(Long.parseLong(args.get(0)));
-				else return this.printError(Common.excStr(INV_PARAM, param));
-			}
-			
-			else if ( id.equals(Message.DELETE) ) result = this.deletePost(Long.parseLong(args.get(0)));
-			
-			else if ( id.equals(Message.REWIN) ) result = this.rewinPost(Long.parseLong(args.get(0)));
-			
-			else if ( id.equals(Message.RATE) ) result = this.ratePost(Long.parseLong(args.get(0)), args.get(1));
-			
-			else if ( id.equals(Message.COMMENT) ) result = this.addComment(Long.parseLong(args.get(0)), args.get(1));
-			
-			else if ( id.equals(Message.WALLET) ) {
-				switch (param) {
-					case Message.EMPTY : { result = this.getWallet(); break; }
-					case Message.BTC : { result = this.getWalletInBitcoin(); break; }
-					case Message.NOTIFY : { 
-						List<String> notifies = this.walletNotifies();
-						StringBuilder sb = new StringBuilder();
-						for (String str : notifies) sb.append(str + "\n");
-						this.out.print(sb.toString());
+				
+				else if (idCode == Message.LOGIN ) {
+					String u = args.get(0);
+					result = this.login(args.get(0), args.get(1));
+					if (result) { this.setUsername(u); this.parser.setPrompt("%s> ", u); }
+				}
+				
+				else if (idCode == Message.QUIT || idCode == Message.EXIT ) {
+					if (this.isUserSet()) return this.printError(ALREADY_LOGGED);
+					else {
+						this.quitReq();
+						this.setState(State.EXIT);
 						result = true;
-						break;
-					} default : return this.printError(Common.excStr(INV_PARAM, param));
-				}				 
+					}
+				}
+										
+				
+				else if ( idCode == Message.LOGOUT ) {
+					if (!this.isUserSet()) return this.printError(NONE_LOGGED);
+					else {
+						result = this.logout(this.getUsername());
+						if (result) { this.unsetUsername(); this.parser.resetPrompt(); }
+					}
+				}
+				
+				else if ( idCode == Message.LIST ) {
+					if (paramCode == Message.USERS) result = this.listUsers();
+					else if (paramCode == Message.FOLLOWERS) result = this.listFollowers();
+					else if (paramCode == Message.FOLLOWING) result = this.listFollowing();
+					else return this.printError(Common.excStr(INV_PARAM, param));
+				}
+				
+				else if ( idCode == Message.FOLLOW ) result = this.followUser(args.get(0));
+				
+				else if ( idCode == Message.UNFOLLOW ) result = this.unfollowUser(args.get(0));
+				
+				else if ( idCode == Message.BLOG ) result = this.viewBlog();
+				
+				else if ( idCode == Message.POST ) result = this.createPost(args.get(0), args.get(1));
+				
+				else if ( idCode == Message.SHOW ) {
+					if (paramCode == Message.FEED) result = this.showFeed();
+					else if (paramCode == Message.POST) result = this.showPost(Long.parseLong(args.get(0)));
+					else return this.printError(Common.excStr(INV_PARAM, param));
+				}
+				
+				else if ( idCode == Message.DELETE ) result = this.deletePost(Long.parseLong(args.get(0)));
+				
+				else if ( idCode == Message.REWIN ) result = this.rewinPost(Long.parseLong(args.get(0)));
+				
+				else if ( idCode == Message.RATE ) result = this.ratePost(Long.parseLong(args.get(0)), args.get(1));
+				
+				else if ( idCode == Message.COMMENT ) result = this.addComment(Long.parseLong(args.get(0)), args.get(1));
+				
+				else if ( idCode == Message.WALLET ) {
+					switch (paramCode) {
+						case Message.EMPTY : { result = this.getWallet(); break; }
+						case Message.BTC : { result = this.getWalletInBitcoin(); break; }
+						case Message.NOTIFY : { 
+							List<String> notifies = this.walletNotifies();
+							StringBuilder sb = new StringBuilder();
+							for (String str : notifies) sb.append(str + "\n");
+							this.out.print(sb.toString());
+							result = true;
+							break;
+						} default : return this.printError(Common.excStr(INV_PARAM, param));
+					}				 
+				}
+				
+				else if ( idCode == Message.HELP ) {
+					if (param == null || paramCode == Message.EMPTY ) {
+						List<String> l = cmd.getArgs();
+						result = ( l.isEmpty() ? this.help() : this.help(l.get(0)) );
+					} else return this.printError(Common.excStr(INV_PARAM, param));
+				}
+				else return this.printError(Common.excStr(INV_CMD, id));
 			}
-			
-			else if ( id.equals(Message.HELP) ) {
-				if (param == null || param.equals(Message.EMPTY) ) {
-					List<String> l = cmd.getArgs();
-					result = ( l.isEmpty() ? this.help() : this.help(l.get(0)) );
-				} else return this.printError(Common.excStr(INV_PARAM, param));
-			}
-			else return this.printError(Common.excStr(INV_CMD, id));
-			
 			return result;
-		} catch (IllegalArgumentException ex) { return this.printError(Common.excStr(ILLARG)); }
+		} catch (MessageException mex) { logger.logException(mex); return this.printError(Common.excStr(ILLARG)); }
+		catch (IllegalArgumentException iae) { logger.logException(iae); return this.printError(Common.excStr(ILLARG)); }
 	}
 	
 	/**
@@ -356,21 +359,20 @@ public final class WinsomeClient implements AutoCloseable {
 	 * @return true on success, false on error.
 	 * @throws IOException On I/O errors.
 	 */
-	private boolean simpleRequest(String type, String parameter, List<String> args) throws IOException {
+	private boolean simpleRequest(int type, int parameter, List<String> args) throws IOException {
 		try {
 			Message msg = new Message(type, parameter, args);
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
-				List<String> l = msg.getArguments();
-				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
+				if (msg.isEmpty()) return this.printError(ILL_RESPONSE);
+				List<String> l = Common.convertArgs(msg);
 				String confirm = l.remove(0);
-				String[] strCodes = msg.getIdParam();
-				String id = strCodes[0], param = strCodes[1];
-				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.EMPTY)) return this.printError(ILL_RESPONSE);
+				int id = msg.getIdCode(), param = msg.getParamCode();
+				if (id == Message.OK) {
+					if (param != Message.EMPTY) return this.printError(ILL_RESPONSE);
 					return this.printOK(confirm);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
+				} else if (id == Message.ERROR) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
 		} catch (MessageException mex) { logger.logException(mex); return false; }		
@@ -388,17 +390,15 @@ public final class WinsomeClient implements AutoCloseable {
 			Message msg = new Message(Message.WALLET, (btc ? Message.BTC : Message.EMPTY), null);
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			if ((msg = Message.recvFromStream(tcpIn)) == null) return this.printError(CLOSED);
-			String[] strCodes = msg.getIdParam();
-			String id = strCodes[0], param = strCodes[1];
-			List<String> l = msg.getArguments();
-			if (l.isEmpty()) return this.printError(ILL_RESPONSE);
+			int id = msg.getIdCode(), param = msg.getParamCode();
+			if (msg.isEmpty()) return this.printError(ILL_RESPONSE);
+			List<String> l = Common.convertArgs(msg);
 			String confirm = l.remove(0);
-			if (id.equals(Message.OK)) {
-				if (!param.equals(Message.WALLET)) return this.printError(ILL_RESPONSE);
-				
+			if (id == Message.OK) {
+				if (param != Message.WALLETDATA) return this.printError(ILL_RESPONSE);
 				String output = this.formatWallet(l, btc);
 				return this.printOK("%s%n%s", confirm, output);
-			} else if (id.equals(Message.ERR)) return this.printError(confirm);
+			} else if (id == Message.ERROR) return this.printError(confirm);
 			else return this.printError(ILL_RESPONSE);
 		} catch (MessageException mex) { logger.logException(mex); return false; }				
 	}
@@ -491,7 +491,7 @@ public final class WinsomeClient implements AutoCloseable {
 	public final LinkedBlockingQueue<String> walletNotifyingList() { return this.walletNotifies; }
 	
 	public final String tcpHost() { return this.serverHost; }
-
+	
 	public final PrintStream out() {return this.out; }
 	
 	
@@ -533,14 +533,13 @@ public final class WinsomeClient implements AutoCloseable {
 			msg = Message.recvFromStream(tcpIn);
 			if (msg == null) return this.printError(CLOSED);
 			
-			String id, param;
-			id = msg.getIdStr(); param = msg.getParamStr();
+			int id = msg.getIdCode(), param = msg.getParamCode();
 			
-			List<String> l = msg.getArguments();
-			if (l.isEmpty()) return this.printError(ILL_RESPONSE);
+			if (msg.isEmpty()) return this.printError(ILL_RESPONSE);
+			List<String> l = Common.convertArgs(msg);
 			String confirm = l.remove(0);
 			
-			if (id.equals(Message.OK) && param.equals(Message.INFO)) {
+			if (id == Message.OK && param == Message.INFO) {
 				if (l.size() < 3) return this.printError(ILL_RESPONSE);
 				String 
 					mcastAddr = l.remove(0),
@@ -566,10 +565,8 @@ public final class WinsomeClient implements AutoCloseable {
 				this.setState(State.COMM);
 				return this.printOK(confirm);
 				
-			} else if (id.equals(Message.ERR)) {
-				return this.printError(confirm);
-			
-			} else return this.printError(ILL_RESPONSE);
+			} else if (id == Message.ERROR) return this.printError(confirm);
+			else return this.printError(ILL_RESPONSE);
 			
 		} catch (MessageException | IllegalArgumentException ex) { logger.logException(ex); return false; }
 	}
@@ -580,12 +577,12 @@ public final class WinsomeClient implements AutoCloseable {
 			Message msg = new Message(Message.LOGOUT, Message.EMPTY, CollectionsUtils.toList(username));
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			if ((msg = Message.recvFromStream(tcpIn)) == null) return this.printError(CLOSED);
-			String id = msg.getIdStr(), param = msg.getParamStr();
-			List<String> l = msg.getArguments();
+			int id = msg.getIdCode(), param = msg.getParamCode();
+			List<String> l = Common.convertArgs(msg);
 			if (l.size() != 1) return this.printError(ILL_RESPONSE);
 			String confirm = l.remove(0);
-			if (id.equals(Message.OK)) {
-				if (!param.equals(Message.EMPTY)) return this.printError(ILL_RESPONSE);
+			if (id == Message.OK) {
+				if (param != Message.EMPTY) return this.printError(ILL_RESPONSE);
 				/* Closing multicast handling thread (does NOT join the other thread!) */
 				if (this.walletNotifier != null) this.walletNotifier.close();
 				this.walletNotifier.join();
@@ -596,7 +593,7 @@ public final class WinsomeClient implements AutoCloseable {
 				this.clearFollowers();
 				/* Printing result */
 				return this.printOK(confirm);
-			} else if (id.equals(Message.ERR)) return this.printError(confirm);
+			} else if (id != Message.ERROR) return this.printError(confirm);
 			else return this.printError(ILL_RESPONSE);
 		} catch (MessageException ex) { logger.logException(ex); return false; }
 	}
@@ -607,13 +604,12 @@ public final class WinsomeClient implements AutoCloseable {
 			if ( !(msg.sendToStream(tcpOut)) ) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
-				String[] strCodes = Message.getIdParam(msg.getIdCode(), msg.getParamCode());
-				String id = strCodes[0], param = strCodes[1];
-				List<String> l = msg.getArguments();
-				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
+				int id = msg.getIdCode(), param = msg.getParamCode();
+				if (msg.isEmpty()) return this.printError(ILL_RESPONSE);
+				List<String> l = Common.convertArgs(msg);
 				String confirm = l.remove(0);
-				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.USLIST)) return this.printError(ILL_RESPONSE);
+				if (id == Message.OK) {
+					if (param != Message.USLIST) return this.printError(ILL_RESPONSE);
 					ConcurrentMap<String, List<String>> map;
 					if (!l.isEmpty()) {
 						map = Serialization.deserializeMap(l);
@@ -622,7 +618,7 @@ public final class WinsomeClient implements AutoCloseable {
 					String output = this.formatUserList(map);
 					if (output == null) return this.printError("when formatting users list output");
 					return this.printOK("%s%n%s", confirm, output);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
+				} else if (id == Message.ERROR) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
 		} catch (MessageException mex) { logger.logException(mex); return false; }
@@ -641,13 +637,12 @@ public final class WinsomeClient implements AutoCloseable {
 			if ( !(msg.sendToStream(tcpOut)) ) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
-				String[] strCodes = Message.getIdParam(msg.getIdCode(), msg.getParamCode());
-				String id = strCodes[0], param = strCodes[1];
-				List<String> l = msg.getArguments();
-				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
+				int id = msg.getIdCode(), param = msg.getParamCode();
+				if (msg.isEmpty()) return this.printError(ILL_RESPONSE);
+				List<String> l = Common.convertArgs(msg);
 				String confirm = l.remove(0);
-				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.USLIST)) return this.printError(ILL_RESPONSE);
+				if (id == Message.OK) {
+					if (param != Message.USLIST) return this.printError(ILL_RESPONSE);
 					ConcurrentMap<String, List<String>> map;
 					if (l.size() > 0) {
 						map = Serialization.deserializeMap(l);
@@ -656,7 +651,7 @@ public final class WinsomeClient implements AutoCloseable {
 					String output = this.formatUserList(map);
 					if (output == null) return this.printError("when formatting following users list output");
 					return this.printOK("%s%n%s", confirm, output);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
+				} else if (id == Message.ERROR) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
 		} catch (MessageException mex) { logger.logException(mex); return false; }
@@ -678,13 +673,12 @@ public final class WinsomeClient implements AutoCloseable {
 			if (!msg.sendToStream(tcpOut)) { return this.printError(CLOSED); }
 			else {
 				msg = Message.recvFromStream(tcpIn);
-				List<String> l = msg.getArguments();
+				List<String> l = Common.convertArgs(msg);
 				if (l.size() % 3 != 1) return this.printError(ILL_RESPONSE);
 				String confirm = l.remove(0);
-				String[] strCodes = msg.getIdParam();
-				String id = strCodes[0], param = strCodes[1];
-				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.PSLIST)) return this.printError(ILL_RESPONSE);
+				int id = msg.getIdCode(), param = msg.getParamCode();
+				if (id == Message.OK) {
+					if (param != Message.PSLIST) return this.printError(ILL_RESPONSE);
 					List<List<String>> posts;
 					if (l.size() > 0) {
 						posts = Serialization.deserializePostList(l, 3);
@@ -693,7 +687,7 @@ public final class WinsomeClient implements AutoCloseable {
 					String output = this.formatPostList(posts);
 					if (output == null) return this.printError("when formatting post list");
 					else return this.printOK("%s%n%s", confirm, output);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
+				} else if (id == Message.ERROR) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
 		} catch (MessageException mex) { logger.logException(mex); return false; }
@@ -701,7 +695,7 @@ public final class WinsomeClient implements AutoCloseable {
 	
 	public boolean createPost(String title, String content) throws IOException {
 		Common.notNull(title, content);
-		return this.simpleRequest(Message.POST, null, CollectionsUtils.toList(title, content));
+		return this.simpleRequest(Message.POST, Message.EMPTY, CollectionsUtils.toList(title, content));
 	}
 	
 	public boolean showFeed() throws IOException {
@@ -710,19 +704,18 @@ public final class WinsomeClient implements AutoCloseable {
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
-				String[] strCodes = msg.getIdParam();
-				String id = strCodes[0], param = strCodes[1];
-				List<String> l = msg.getArguments();
+				int id = msg.getIdCode(), param = msg.getParamCode();
+				List<String> l = Common.convertArgs(msg);
 				if (l.size() % 3 != 1) return this.printError(ILL_RESPONSE);
 				String confirm = l.remove(0);
-				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.PSLIST)) return this.printError(ILL_RESPONSE);
+				if (id == Message.OK) {
+					if (param != Message.PSLIST) return this.printError(ILL_RESPONSE);
 					List<List<String>> posts = Serialization.deserializePostList(l, 3);
 					if (posts == null) return this.printError("When getting post list");
 					String output = this.formatPostList(posts);
 					if (output == null) return this.printError("When formatting post list");
 					return this.printOK("%s%n%s", confirm, output);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
+				} else if (id == Message.ERROR) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
 		} catch (MessageException mex) { logger.logException(mex); return false; }		
@@ -735,18 +728,16 @@ public final class WinsomeClient implements AutoCloseable {
 			if (!msg.sendToStream(tcpOut)) return this.printError(CLOSED);
 			else {
 				msg = Message.recvFromStream(tcpIn);
-				String[] strCodes = msg.getIdParam();
-				String id = strCodes[0], param = strCodes[1];
-				List<String> l = msg.getArguments();
-				if (l.isEmpty()) return this.printError(ILL_RESPONSE);
+				int id = msg.getIdCode(), param = msg.getParamCode();
+				if (msg.isEmpty()) return this.printError(ILL_RESPONSE);
+				List<String> l = Common.convertArgs(msg);
 				String confirm = l.remove(0);
-				if (id.equals(Message.OK)) {
-					if (!param.equals(Message.POST)) return this.printError(ILL_RESPONSE);
-					
+				if (id == Message.OK) {
+					if (param != Message.POSTDATA) return this.printError(ILL_RESPONSE);
 					String output = this.formatPost(l);
 					if (output == null) return this.printError("when formatting post data");
 					return this.printOK("%s%n%s", confirm, output);
-				} else if (id.equals(Message.ERR)) return this.printError(confirm);
+				} else if (id == Message.ERROR) return this.printError(confirm);
 				else return this.printError(ILL_RESPONSE);
 			}
 		} catch (MessageException mex) { logger.logException(mex); return false; }		
@@ -764,12 +755,12 @@ public final class WinsomeClient implements AutoCloseable {
 	
 	public boolean ratePost(long idPost, String vote) throws IOException {
 		Common.allAndArgs(idPost >= 0, vote != null);
-		return this.simpleRequest( Message.RATE, null, CollectionsUtils.toList(Long.toString(idPost), vote) );
+		return this.simpleRequest( Message.RATE, Message.EMPTY, CollectionsUtils.toList(Long.toString(idPost), vote) );
 	}
 	
 	public boolean addComment(long idPost, String comment) throws IOException {
 		Common.allAndArgs(idPost >= 0, comment != null);
-		return this.simpleRequest(Message.COMMENT, null, CollectionsUtils.toList(Long.toString(idPost), comment) );
+		return this.simpleRequest(Message.COMMENT, Message.EMPTY, CollectionsUtils.toList(Long.toString(idPost), comment) );
 	}
 	
 	/**

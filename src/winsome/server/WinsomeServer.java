@@ -12,6 +12,8 @@ import com.google.gson.stream.*;
 import java.io.*;
 import java.net.*;
 import java.nio.channels.*;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.rmi.AlreadyBoundException;
 import java.rmi.*;
 import java.rmi.registry.*;
@@ -30,6 +32,8 @@ import winsome.util.*;
 public final class WinsomeServer implements AutoCloseable {
 	/* Instance of the server */
 	private static WinsomeServer server = null;
+	
+	private static final String UTF8 = StandardCharsets.UTF_8.name();
 	
 	/* No illegal state occurred */
 	private static final Pair<String, String> ILLSTATE_OK = new Pair<>(null, null);
@@ -151,8 +155,9 @@ public final class WinsomeServer implements AutoCloseable {
 	/* Gestione delle connessioni TCP con i client */
 	private transient ConcurrentMap<SocketChannel, User> loggedMap; //Mappa ogni username con un channel
 	private transient Set<SocketChannel> unlogged; //Canali non mappati, su cui cioè nessun utente è loggato
-
-	/* Map from tags to users that have that tags */
+	private transient ConcurrentMap<SocketChannel, String> charsetMap;
+	
+	/* Map from tags to users that have that tag */
 	private ConcurrentMap<String, NavigableSet<String>> tagsMap;
 	/* TCP connection data */
 	private String serverHost = null;
@@ -207,7 +212,7 @@ public final class WinsomeServer implements AutoCloseable {
 		catch (IOException | DeserializationException ex) { table = new Table<>(); }
 		return table;
 	}
-
+	
 	/**
 	 * Initializes non-transient fields of the server: this constructor is called by {@link #createServer(Map)}
 	 *  when there is no JSON data from which to initialize server.
@@ -281,6 +286,7 @@ public final class WinsomeServer implements AutoCloseable {
 		this.tcpSockAddr = new InetSocketAddress(InetAddress.getByName(serverHost), tcpPort);
 		this.loggedMap = new ConcurrentHashMap<>();
 		this.unlogged = new HashSet<>();
+		this.charsetMap = new ConcurrentHashMap<>();
 		this.tcpListener = ServerSocketChannel.open();
 		this.tcpListener.bind(this.tcpSockAddr);
 		this.tcpListener.socket().setSoTimeout(tcpTimeout);
@@ -437,8 +443,8 @@ public final class WinsomeServer implements AutoCloseable {
 						boolean sent = true;
 						try { sent = msg.sendToChannel(client, buf); }
 						catch (IOException ioe) { sent = false; }
-						String idCode = msg.getIdStr();
-						if (!sent || idCode.equals(Message.QUIT) || idCode.equals(Message.EXIT))
+						int idCode = msg.getIdCode();
+						if (!sent || idCode ==  Message.QUIT || idCode == Message.EXIT)
 							{ this.closeConnection(selectKey); }
 						else selectKey.interestOps(SelectionKey.OP_READ);
 					} else throw new IllegalStateException("Unknown key state");
@@ -551,6 +557,7 @@ public final class WinsomeServer implements AutoCloseable {
 	@NotNull
 	Message login(SelectionKey skey, List<String> args) {
 		SocketChannel client = (SocketChannel)skey.channel();
+		String charset = charsetMap.getOrDefault(client, UTF8);
 		String username = args.get(0), password = args.get(1);
 		User user = users.get(username);
 		if (user == null) return Message.newError(ServerUtils.U_NEXISTING, username);
@@ -757,7 +764,7 @@ public final class WinsomeServer implements AutoCloseable {
 		User user = loggedMap.get(client);
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
 		List<String> feed = user.getFeed();
-		return Message.newPostList(feed, Message.OK);
+		return Message.newPostList(feed, ServerUtils.OK);
 	}
 	
 	/**
@@ -781,7 +788,7 @@ public final class WinsomeServer implements AutoCloseable {
 			Common.allAndState(posts.size() >= 4);
 			String title = posts.remove(0), content = posts.remove(0);
 			String likes = posts.remove(0), dislikes = posts.remove(0);
-			return Message.newPost(title, content, likes, dislikes, posts, Message.OK); }
+			return Message.newPost(title, content, likes, dislikes, posts, ServerUtils.OK); }
 		catch (DataException de) {
 			logger.logException(de);
 			return Message.newError(de.getMessage());
@@ -805,7 +812,7 @@ public final class WinsomeServer implements AutoCloseable {
 		if (user == null) return Message.newError(ServerUtils.U_NONELOGGED);
 		try {
 			user.deletePost(idPost);
-			return Message.newOK(Message.OK);
+			return Message.newOK(ServerUtils.OK);
 		} catch (DataException de) {
 			logger.logException(de);
 			String msg = de.getMessage();
